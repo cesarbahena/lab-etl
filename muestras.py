@@ -1,535 +1,500 @@
 from selenium import webdriver
 from selenium.webdriver.support.ui import Select
-from selenium.webdriver.chrome.options import Options
 from time import sleep
 from datetime import datetime
-import numpy as np
+from datetime import timedelta
 import pandas as pd
 import shutil
-import pdb
-col_types = {'Fecha de captura': 'datetime64', 'Fecha de recepción': 'datetime64', 'Folio OT': 'uint32', 'Cliente': 'uint16', 'Progresivo': 'uint16', 'Apellido paterno': 'object', 'Apellido materno': 'object', 'Nombre': 'object', 'Código de estudio': 'uint16',
-             'Nombre del estudio': 'category', 'Fecha de captura de resultado': 'datetime64', 'Fecha de liberación': 'datetime64', 'Sucursal de proceso': 'category', 'Maquilador': 'category', 'Nota de proceso': 'category', 'Fecha de nacimiento': 'datetime64', 'Fecha de actualización': 'datetime64'}
-non_date_col_types = {'Folio OT': 'uint32', 'Cliente': 'uint16', 'Progresivo': 'uint16', 'Apellido paterno': 'object', 'Apellido materno': 'object', 'Nombre': 'object',
-                      'Código de estudio': 'uint16', 'Nombre del estudio': 'category', 'Sucursal de proceso': 'category', 'Maquilador': 'category', 'Nota de proceso': 'category'}
-col_names = list(col_types.keys())
-date_cols = [0, 1, 10, 11, 15, 16]
-chrome_options = Options()
-chrome_options.headless = True
-s = 2
-verbose = True
 
 
-def login():
-    global quimios
-    quimios = webdriver.Chrome('chromedriver')
-    quimios.get('http://172.16.0.117/')
-    quimios.find_element_by_id('Login1_UserName').send_keys('cbahena')
-    quimios.find_element_by_id('Login1_Password').send_keys('alpe58')
-    quimios.find_element_by_id('Login1_LoginButton').click()
+dtypes = {
+    '_lblFechaGrd': 'datetime64[ns]',
+    '_lblFechaRecep': 'datetime64[ns]',
+    '_lblFolioGrd': 'uint32',
+    '_lblClienteGrd': 'uint16',
+    '_lblPacienteGrd': 'uint16',
+    '_lblEstPerGrd': 'uint16',
+    '_Label1': 'category',
+    '_lblFecCapRes': 'datetime64[ns]',
+    '_lblFecLibera': 'datetime64[ns]',
+    '_lblSucProc': 'category',
+    '_lblMaquilador': 'category',
+    '_Label3': 'category',
+    '_lblFecNac': 'datetime64[ns]',
+}
+cols = list(dtypes.keys())
+date_cols = ['_lblFechaGrd', '_lblFechaRecep',
+             '_lblFecCapRes', '_lblFecLibera']
+non_date_dtypes = {
+    '_lblFolioGrd': 'uint32',
+    '_lblClienteGrd': 'uint16',
+    '_lblPacienteGrd': 'uint16',
+    '_lblEstPerGrd': 'uint16',
+    '_Label1': 'category',
+    '_lblSucProc': 'category',
+    '_lblMaquilador': 'category',
+    '_Label3': 'category',
+}
+parse_cols = [0, 1, 7, 8, 12]
 
 
-def login_headless():
-    global quimios
-    quimios = webdriver.Chrome('chromedriver', options=chrome_options)
-    quimios.get('http://172.16.0.117/')
-    quimios.find_element_by_id('Login1_UserName').send_keys('cbahena')
-    quimios.find_element_by_id('Login1_Password').send_keys('alpe58')
-    quimios.find_element_by_id('Login1_LoginButton').click()
+class Scraper:
+    registry = []
+    start = datetime(datetime.today().year, datetime.today(
+    ).month, datetime.today().day, 23, 59, 59)
+    end = datetime(2021, 1, 15)
+    n = 500
+    verbose = 2
+    reg = False
+    s = 2
+    skip = False
+    df = pd.DataFrame({col: [] for col in cols})
+    file = 'Muestras.csv'
+    stop = []
 
+    def __init__(self, client):
+        self.client = client
+        self.dict = {col: [] for col in cols}
+        self.fails = 0
+        self.page = 1
 
-def get_client(client):
-    quimios.get('http://172.16.0.117/FasePreAnalitica/ConsultaOrdenTrabajo.aspx')
-    quimios.find_element_by_id(
-        'ctl00_ContentMasterPage_txtcliente').send_keys(client)
-    quimios.find_element_by_id('ctl00_ContentMasterPage_btnBuscar').click()
-    sleep(s*2)
+    @classmethod
+    def load(cls, file=None):
+        '''
+        Hace una dataframe de la información almacenada en csv paa poder trabajar con él.
+        '''
+        # Asigna la ruta del archivo en tiempo de ejecución y no de definición
+        if file is None:
+            file = 'Muestras.csv'
+        cls.file = file
+        # Genera una copia de respaldo
+        backup(file)
+        # Almacena el dataframe como atributo de clase para que todas las instancias de clientes puedan acceder a él
+        info('load', cls.file)
+        cls.df = pd.read_csv(file, dtype=non_date_dtypes,
+                             parse_dates=parse_cols, dayfirst=True)
 
-
-def get_col(row, col):
-    return quimios.find_element_by_id('ctl00_ContentMasterPage_grdConsultaOT_ctl' + row + col).text
-
-
-def get_date(row, col):
-    try:
-        return datetime.strptime(get_col(row, col)[:-3] + get_col(row, col)[-2], '%d/%m/%Y %I:%M:%S %p')
-    except:
-        return datetime(2099, 12, 31)
-
-
-def get_nac(row, col):
-    return datetime.strptime(get_col(row, col), '%d/%m/%Y')
-
-
-def get_row(row):
-
-    data = []
-
-    try:
-        data.append(get_date(row, '_lblFechaGrd'))
-    except:
-        data.append(pd.NaT)
-
-    try:
-        data.append(get_date(row, '_lblFechaRecep'))
-    except:
-        data.append(pd.NaT)
-
-    try:
-        data.append(int(get_col(row, '_lblFolioGrd')))
-    except:
-        data.append(0)
-
-    try:
-        data.append(int(get_col(row, '_lblClienteGrd')))
-    except:
-        data.append(0)
-
-    try:
-        data.append(int(get_col(row, '_lblPacienteGrd')))
-    except:
-        data.append(0)
-
-    try:
-        data.append(get_col(row, '_lblPaternoGrd'))
-    except:
-        data.append(pd.NA)
-
-    try:
-        data.append(get_col(row, '_lblApMaternoGrd'))
-    except:
-        data.append(pd.NA)
-
-    try:
-        data.append(get_col(row, '_lblNombreGrd'))
-    except:
-        data.append(pd.NA)
-
-    try:
-        data.append(int(get_col(row, '_lblEstPerGrd')))
-    except:
-        data.append(0)
-
-    try:
-        data.append(get_col(row, '_Label1'))
-    except:
-        data.append(pd.NA)
-
-    try:
-        data.append(get_date(row, '_lblFecCapRes'))
-    except:
-        data.append(pd.NaT)
-
-    try:
-        data.append(get_date(row, '_lblFecLibera'))
-    except:
-        data.append(pd.NaT)
-
-    try:
-        data.append(get_col(row, '_lblSucProc'))
-    except:
-        data.append(pd.NA)
-
-    try:
-        if get_col(row, '_lblMaquilador') != '':
-            data.append(get_col(row, '_lblMaquilador'))
-        else:
-            data.append(pd.NA)
-    except:
-        data.append(pd.NA)
-
-    try:
-        data.append(get_col(row, '_Label3'))
-    except:
-        data.append(pd.NA)
-
-    try:
-        data.append(get_nac(row, '_lblFecNac'))
-    except:
-        data.append(pd.NaT)
-
-    data.append(datetime.now())
-
-    data = pd.DataFrame([data], columns=col_names)
-    data = pd.DataFrame.astype(data, dtype=col_types)
-
-    return data
-
-
-def append_row(row, dataframe, day=datetime.today().day, month=datetime.today().month, year=datetime.today().year, n=10, to_day=datetime.today().day, to_month=datetime.today().month, to_year=datetime.today().year):
-    global i
-    if datetime(to_year, to_month, to_day, 23, 59, 59) > get_date(row, '_lblFechaRecep') > datetime(year, month, day):
-        dataframe = pd.concat([dataframe, get_row(row)])
-    else:
-        i += 1
-    return dataframe
-
-
-def get_page(dataframe, day=datetime.today().day, month=datetime.today().month, year=datetime.today().year, n=10, to_day=datetime.today().day, to_month=datetime.today().month, to_year=datetime.today().year):
-    for row in [str(num).zfill(2) for num in range(2, 12)]:
-        if i < n:
-            dataframe = append_row(row, dataframe, day,
-                                   month, year, n, to_day, to_month, to_year)
-    return dataframe
-
-
-def next_page(page):
-    quimios.find_element_by_xpath(
-        '//*[@id="ctl00_ContentMasterPage_grdConsultaOT"]/tbody/tr[12]/td/table/tbody/tr/td[' + str(page) + ']/a').click()
-    sleep(s)
-
-
-def skip_pages(to_day=datetime.today().day, to_month=datetime.today().month, to_year=datetime.today().year):
-    current_page = 2
-    next_page(11)
-    while get_date('11', '_lblFechaRecep') > datetime(to_year, to_month, 28, 23, 59, 59):
-        if verbose:
-            print('next_page(fast loop)')
-        next_page(12)
-    next_page(1)
-    next_page(2)
-    while get_date('11', '_lblFechaRecep') > datetime(to_year, to_month, to_day, 23, 59, 59):
-        for page in range(3, 13):
-            if get_date('11', '_lblFechaRecep') > datetime(to_year, to_month, to_day, 23, 59, 59):
-                if verbose:
-                    print('next_page(slow loop)')
-                next_page(page)
-            else:
-                current_page = page-1
-                break
-    if verbose:
-        print(f'prev_page({current_page-1})')
-    next_page(current_page-1)
-    if verbose:
-        print(f'current_page{current_page}')
-    return current_page
-
-
-def search_pages(dataframe, day=datetime.today().day, month=datetime.today().month, year=datetime.today().year, n=10, to_day=datetime.today().day, to_month=datetime.today().month, to_year=datetime.today().year):
-    global i
-    i = 0
-    for page in range(2, 12):
-        if i < n:
-            if verbose:
-                print(f'get_page({page-1})')
-            dataframe = get_page(dataframe, day, month,
-                                 year, n, to_day, to_month, to_year)
-            try:
-                if verbose:
-                    print(f'next_page({page})')
-                next_page(page)
-            except:
-                if verbose:
-                    print(f'Breaking for loop because there is no page {page}')
-                break
-        else:
-            if verbose:
-                print('Breaking for loop')
-            break
-    if verbose:
-        print(f'For loop completed')
-    stop_sign = False
-    while i < n:
-        for page in range(3, 13):
-            if i < n:
-                if verbose:
-                    print(f'get_page({page-1})')
-                dataframe = get_page(dataframe, day, month,
-                                     year, n, to_day, to_month, to_year)
-                if verbose:
-                    print(f'next_page({page})')
-                try:
-                    next_page(page)
-                except:
-                    if verbose:
-                        print(
-                            f'Breaking while loop because there is no page {page}')
-                    stop_sign = True
-                    break
-            else:
-                if verbose:
-                    print('While loop completed')
-                break
-        if stop_sign:
-            break
-    return dataframe
-
-
-def search_pages_after_skip(dataframe, day=datetime.today().day, month=datetime.today().month, year=datetime.today().year, n=10, to_day=datetime.today().day, to_month=datetime.today().month, to_year=datetime.today().year, current_page=2):
-    global i
-    i = 0
-    for page in range(current_page, 13):
-        if i < n:
-            if verbose:
-                print(f'get_page({page-1})')
-            dataframe = get_page(dataframe, day, month,
-                                 year, n, to_day, to_month, to_year)
-            try:
-                if verbose:
-                    print(f'next_page({page})')
-                next_page(page)
-            except:
-                if verbose:
-                    print(f'Breaking for loop because there is no page {page}')
-                break
-        else:
-            if verbose:
-                print('Breaking for loop')
-            break
-    if verbose:
-        print(f'For loop completed')
-    stop_sign = False
-    while i < n:
-        for page in range(3, 13):
-            if i < n:
-                dataframe = get_page(dataframe, day, month,
-                                     year, n, to_day, to_month, to_year)
-                try:
-                    if verbose:
-                        print(f'next_page({page})')
-                    next_page(page)
-                except:
-                    if verbose:
-                        print(
-                            f'Breaking while loop because there is no page {page}')
-                    stop_sign = True
-                    break
-            else:
-                if verbose:
-                    print('While loop completed')
-                break
-        if stop_sign:
-            break
-    return dataframe
-
-
-def search_pages_after_stop(dataframe, day=datetime.today().day, month=datetime.today().month, year=datetime.today().year, n=10, to_day=datetime.today().day, to_month=datetime.today().month, to_year=datetime.today().year):
-    global i
-    i = 0
-    n = n*3
-    current_page = 2
-    last_page = 13
-    try:
-        if len(quimios.find_element_by_xpath('//*[@id="ctl00_ContentMasterPage_grdConsultaOT"]/tbody/tr[12]/td/table/tbody/tr/td[' + str(2) + ']/a').text) == 1:
-            last_page = 12
-    except:
+    def login(self):
+        '''
+        Revisa si hay una sesión de QUIMIOS-W abierta; si no, inicia sesión.
+        '''
         try:
-            if len(quimios.find_element_by_xpath('//*[@id="ctl00_ContentMasterPage_grdConsultaOT"]/tbody/tr[12]/td/table/tbody/tr/td[' + str(3) + ']/a').text) == 1:
-                last_page = 12
-        except:
-            pass
-    for page in range(1, 12):
+            Scraper.quimios.find_element_by_xpath(
+                '//*[@id="aspnetForm"]/div[3]/div[1]/div/div/div/div[1]/span')
+        except Exception:
+            info('login')
+            Scraper.quimios = webdriver.Chrome('chromedriver')
+            Scraper.quimios.get('http://172.16.0.117/')
+            Scraper.quimios.find_element_by_id(
+                'Login1_UserName').send_keys('cbahena')
+            Scraper.quimios.find_element_by_id(
+                'Login1_Password').send_keys('alpe58')
+            Scraper.quimios.find_element_by_id('Login1_LoginButton').click()
+            sleep(Scraper.s*2)
+
+    def reset(self):
+        '''
+        Busca el número de cliente en consulta de órdenes de trabajo.
+        '''
         try:
-            quimios.find_element_by_xpath(
-                '//*[@id="ctl00_ContentMasterPage_grdConsultaOT"]/tbody/tr[12]/td/table/tbody/tr/td[' + str(page) + ']/a')
-        except:
-            current_page = page
-            break
-    next_page(current_page-2)
-    for page in range(current_page-1, last_page):
-        if i < n:
-            if verbose:
-                print(f'get_page({page-1})')
-            dataframe = get_page(dataframe, day, month,
-                                 year, n, to_day, to_month, to_year)
-            try:
-                if verbose:
-                    print(f'next_page({page})')
-                next_page(page)
-            except:
-                if verbose:
-                    print(f'Breaking for loop because there is no page{page}')
-                break
-        else:
-            if verbose:
-                print('Breaking for loop')
-            break
-    if verbose:
-        print(f'For loop completed')
-    stop_sign = False
-    while i < n:
-        for page in range(3, 13):
-            if i < n:
-                if verbose:
-                    print(f'get_page({page-1})')
-                dataframe = get_page(dataframe, day, month,
-                                     year, n, to_day, to_month, to_year)
+            if int(Scraper.quimios.find_element_by_xpath('//*[@id="ctl00_ContentMasterPage_lblUsuarioCaptura"]').text) != self.client:
+                info('reset', self.client)
+                Scraper.quimios.get(
+                    'http://172.16.0.117/FasePreAnalitica/ConsultaOrdenTrabajo.aspx')
+                Scraper.quimios.find_element_by_id(
+                    'ctl00_ContentMasterPage_txtcliente').send_keys(self.client)
+                Scraper.quimios.find_element_by_id(
+                    'ctl00_ContentMasterPage_btnBuscar').click()
+                sleep(Scraper.s*2)
+        except Exception:
+            info('reset', self.client)
+            Scraper.quimios.get(
+                'http://172.16.0.117/FasePreAnalitica/ConsultaOrdenTrabajo.aspx')
+            Scraper.quimios.find_element_by_id(
+                'ctl00_ContentMasterPage_txtcliente').send_keys(self.client)
+            Scraper.quimios.find_element_by_id(
+                'ctl00_ContentMasterPage_btnBuscar').click()
+            sleep(Scraper.s*2)
+
+    def get(self, row, col):
+        '''
+        Realiza web scrapping para conseguir los datos de la fila y columna especificada.
+        '''
+        return Scraper.quimios.find_element_by_id(f'ctl00_ContentMasterPage_grdConsultaOT_ctl{str(row).zfill(2)}{col}').text
+
+    def parse(self, row, col):
+        '''
+        Realiza web scrapping para conseguir la fecha de la fila y columna especificada.
+        '''
+        try:
+            return datetime.strptime(f'{self.get(row, col)[:-3]}{self.get(row, col)[-2]}', '%d/%m/%Y %I:%M:%S %p')
+        except Exception:
+            return datetime(2099, 12, 31)
+
+    def birth(self, row):
+        '''
+        Realiza web scrapping para conseguir la fecha de nacimiento de la fila especificada.
+        '''
+        return datetime.strptime(self.get(row, '_lblFecNac'), '%d/%m/%Y')
+
+    def scan(self):
+        '''
+        Escanea la página para buscar muestras recibidas entre las fechas especificadas y almacenar sus datos relevantes en un diccionario para despues convertirlos a un DataFrame.
+        '''
+        # Revisar todas las filas
+        for row in range(2, 12):
+            # Revisar si está entre las fechas especificadas
+            if Scraper.start > self.parse(row, '_lblFechaRecep') > Scraper.end:
+                # Revisar todas las columnas
+                info('row', row)
+                for col in cols:
+                    # Revisar si es columna de fecha
+                    if col in date_cols:
+                        # Extraer fecha
+                        try:
+                            self.dict[col].append(self.parse(row, col))
+                        # Generar valor nulo si falla
+                        except Exception:
+                            self.dict[col].append(pd.NaT)
+                    elif col != '_lblFecNac':
+                        # Extraer datos
+                        try:
+                            self.dict[col].append(self.get(row, col))
+                        # Generar 0 si falla
+                        except Exception:
+                            self.dict[col].append(0)
+                # Extraer fecha de nacimiento
                 try:
-                    if verbose:
-                        print(f'next_page({page})')
-                    next_page(page)
-                except:
-                    if verbose:
-                        print(
-                            f'Breaking while loop because there is no page {page}')
-                    stop_sign = True
-                    break
+                    self.dict['_lblFecNac'].append(self.birth(row))
+                # Generar valor nulo si falla
+                except Exception:
+                    self.dict['_lblFecNac'].append(pd.NaT)
             else:
-                if verbose:
-                    print('While loop completed')
+                self.fails += 1
+
+    def position(self):
+        '''
+        Determina la posición actual entre los números de pagina.
+        '''
+        # Revisar todos los números de página
+        for page in range(1, 13):
+            try:
+                Scraper.quimios.find_element_by_xpath(
+                    f'//*[@id="ctl00_ContentMasterPage_grdConsultaOT"]/tbody/tr[12]/td/table/tbody/tr/td[{page}]/a')
+            # Cuando encuentre la primera excepción, significa que no encuentra ese element porque es la página actual
+            except Exception:
+                self.page = page
                 break
-        if stop_sign:
+
+    def next(self):
+        '''
+        Hace clic en la página siguiente.
+        '''
+        Scraper.quimios.find_element_by_xpath(
+            f'//*[@id="ctl00_ContentMasterPage_grdConsultaOT"]/tbody/tr[12]/td/table/tbody/tr/td[{self.page + 1}]/a').click()
+        sleep(Scraper.s)
+
+    def search(self):
+        '''
+        Inicia la búsqueda de las muestras recibidas tomando en cuenta los parámetros por default o los especificados en la función options().
+        '''
+        # Resetea el contador de intentos fallidos de extraer las muestras recibidas entre las fechas especificadas
+        self.fails = 0
+        # Loop para continuar buscando hasta que se supere el número de intentos fallidos permitido (n)
+        while self.fails < Scraper.n:
+            self.position()
+            self.scan()
+            try:
+                self.next()
+                info('next', self.page + 1)
+            # Si no hay página siguiente, detener el loop
+            except Exception:
+                info('missing', self.page + 1)
+                Scraper.stop.append(f'{self.client}, ')
+                break
+
+    def skim(self):
+        '''
+        Busca rápido entre las páginas si hay muestras entre las fechas especificadas.
+        '''
+        # Bloque de páginas actual
+        block = 0
+        # Loop para verificar si la fecha de recepción de la muestra en la última fila está a menos de 1 mes de la fecha especificada
+        while self.parse(11, '_lblFechaRecep') > Scraper.start + timedelta(30):
+            # Hacer una lista de las páginas faltantes
+            missing = []
+            for page in range(1, 14):
+                try:
+                    Scraper.quimios.find_element_by_xpath(
+                        f'//*[@id="ctl00_ContentMasterPage_grdConsultaOT"]/tbody/tr[12]/td/table/tbody/tr/td[{page}]/a')
+                # Cuando encuentre la primera excepción, significa que no encuentra ese elemento porque es la página actual
+                except Exception:
+                    missing.append(page)
+            # Determinar la última página, la cuál es la segunda ocurrencia de la excepción (la primera es la página actual)
+            last = missing[1] - 1
+            # Dar clic en la última página para avanzar rápido
+            try:
+                Scraper.quimios.find_element_by_xpath(
+                    f'//*[@id="ctl00_ContentMasterPage_grdConsultaOT"]/tbody/tr[12]/td/table/tbody/tr/td[{last}]/a').click()
+                block += 10
+                info('last', block)
+            except Exception:
+                info('missing last', block + 10)
+                break
+            sleep(Scraper.s)
+
+        # Después de encontrar una fecha con menos de 1 mes de diferencia, regresar al bloque de páginas anterior y luego ir a la primera página del bloque
+        try:
+            Scraper.quimios.find_element_by_xpath(
+                f'//*[@id="ctl00_ContentMasterPage_grdConsultaOT"]/tbody/tr[12]/td/table/tbody/tr/td[1]/a').click()
+            sleep(Scraper.s)
+            info('prev')
+        except Exception:
+            info('no prev')
+        try:
+            Scraper.quimios.find_element_by_xpath(
+                f'//*[@id="ctl00_ContentMasterPage_grdConsultaOT"]/tbody/tr[12]/td/table/tbody/tr/td[2]/a').click()
+            sleep(Scraper.s)
+            info('first', block - 10)
+        except Exception:
+            info('no first')
+
+        # Busqueda página por página hasta encontrar la fecha especificada
+        while self.parse(11, '_lblFechaRecep') > Scraper.start:
+            self.position()
+            try:
+                self.next()
+                info('next', self.page)
+            # Si no hay página siguiente, detener el loop
+            except Exception:
+                break
+
+        # Determinar posición y regresar una página
+        self.position()
+        try:
+            Scraper.quimios.find_element_by_xpath(
+                f'//*[@id="ctl00_ContentMasterPage_grdConsultaOT"]/tbody/tr[12]/td/table/tbody/tr/td[{self.page - 1}]/a').click()
+            sleep(Scraper.s)
+            info('prev')
+        except Exception:
+            info('no prev')
+
+    def save(self, file=None):
+        '''
+        Guarda la información en un archivo csv.
+        '''
+        # Asigna la ruta del archivo en tiempo de ejecución y no de definición
+        if file is None:
+            file = 'Muestras.csv'
+        Scraper.file = file
+        info('save', Scraper.file)
+        Scraper.df.to_csv(file, index=False)
+
+
+def main():
+    '''
+    Ejecuta la función principal del script: extraer las muestras recibidas de todos los clientes (o los clientes especificados) entre las fechas especificadas.
+    '''
+    # Carga el archivo csv con la información almacenada anteriormente
+    Scraper.load()
+    # Loop para pedir una lista (válida) de los clientes a buscar
+    while True:
+        input_ = input(
+            'Clientes (separados con comas) o enter para buscar todos: ')
+        # Si se presiona enter con una string vacía, cargar la lista de todos los clientes (csv) y convertirla a una serie de pandas
+        if input_ == '':
+            clients = pd.read_csv('Clientes.csv', squeeze=True)
             break
-    return dataframe
+        # Si se teclea algo, verificar que sean números válidos
+        else:
+            try:
+                clients = [int(cliente) for cliente in input_.split(',')]
+                break
+            except Exception:
+                print('Entrada inválida')
 
+    # Sí la lista es de un solo cliente, preguntar si se desea avanzar rápido entre las páginas para llegar a la fecha deseada
+    if len(clients) == 1:
+        Scraper.skip = False
+        # Loop para verificar respuesta válida
+        while True:
+            input_ = input('¿Saltar páginas? 0: No  1: Sí')
+            if input_ == '1':
+                Scraper.skip = True
+                break
+            elif input_ == '0':
+                break
 
-def append_recibidas(clients, dataframe, day=datetime.today().day, month=datetime.today().month, year=datetime.today().year, n=10, to_day=datetime.today().day, to_month=datetime.today().month, to_year=datetime.today().year):
+    # Preguntar si se desea cambiar ajustes
+    options()
+
+    # Loop para buscar todos los clientes
     for client in clients:
-        get_client(client)
-        dataframe = search_pages(
-            dataframe, day, month, year, n, to_day, to_month, to_year)
-    return dataframe
+        # Crear instancia del cliente
+        c = Scraper(client)
+        # Iniciar sesión si es necesario
+        c.login()
+        # Buscar el número de cliente en Consulta de órdenes de trabajo si es necesario
+        c.reset()
+        # Saltar rápido entre las páginas si se seleccionó la opción
+        if Scraper.skip:
+            c.skim()
+        # Extraer las muestras recibidas del cliente y almacenarlas en un diccionario
+        c.search()
+        # Crear dataframe del diccionario y concatenarlo con el dataframe de clase que contiene todas las muestras
+        Scraper.df = pd.concat(
+            [Scraper.df, pd.DataFrame(c.dict).astype(dtype=dtypes)])
+        # Guarda la información antes de continuar con otro cliente
+        c.save()
 
 
-def skip_then_append_recibidas(dataframe, day=datetime.today().day, month=datetime.today().month, year=datetime.today().year, n=10, to_day=datetime.today().day, to_month=datetime.today().month, to_year=datetime.today().year):
-    if verbose:
-        print('skip_pages()')
-    current_page = skip_pages(to_day, to_month, to_year)
-    if verbose:
-        print('search_pages()')
-    n = n*5
-    dataframe = search_pages_after_skip(
-        dataframe, day, month, year, n, to_day, to_month, to_year, current_page)
-    return dataframe
+def options():
+    '''
+    Inicia la interfaz para ajustar las opciones de búsqueda.
+    '''
+    # Resetear los ajustes por default
+    Scraper.start = datetime(datetime.today().year, datetime.today(
+    ).month, datetime.today().day, 23, 59, 59)
+    Scraper.n = 500
+    Scraper.verbose = 2
+    Scraper.reg = False
+    Scraper.s = 2
+    Scraper.stop = []
+
+    # Loop para pedir una fecha válida para el límite inferior de extracción de datos
+    while True:
+        input_ = input('¿Hasta que fecha extraer los datos?: ')
+        try:
+            end = datetime(int('20' + input_.replace('/', '-').split('-')[2][-2:]), int(input_.replace(
+                '/', '-').split('-')[1]), int(input_.replace('/', '-').split('-')[0]), 23, 59, 59)
+            break
+        except Exception:
+            print('Entrada inválida')
+    Scraper.end = end
+
+    # Loop para la interfaz de ajustes
+    while True:
+        try:
+            # Pedir al usuario que seleccione una opción (y seguir preguntando si no es una opción válida)
+            settings = int(input('0: Continuar sin modificar ajustes\n1: No extraer datos hasta la fecha de hoy\n2: Numero de muestras fuera de las fechas especificadas antes de detener la búsqueda\n3: Detalle a mostrar de las acciones en tiempo real\n4: Activar o desactivar el registro de acciones\n5: Tiempo de espera en caso de mala conexión'))
+
+            # Cada if revisa si la opción seleccionada es una de las opciones válidas
+            if settings == 1:
+                # Cada while True verifica que la variable a modificar sea válida
+                while True:
+                    input_ = input('¿Hasta que fecha extraer los datos?: ')
+                    try:
+                        start = datetime(int('20' + input_.replace('/', '-').split('-')[2][-2:]), int(
+                            input_.replace('/', '-').split('-')[1]), int(input_.replace('/', '-').split('-')[0]))
+                        break
+                    except Exception:
+                        print('Entrada inválida')
+                Scraper.start = start
+            if settings == 2:
+                while True:
+                    try:
+                        input_ = int(input(
+                            'Numero de muestras fuera de las fechas especificadas antes de detener la búsqueda: '))
+                        break
+                    except Exception:
+                        print('Entrada inválida')
+                Scraper.n = input_
+            if settings == 3:
+                while True:
+                    try:
+                        input_ = int(input(
+                            '0: No mostrar acciones en tiempo real\n1: Mostrar acciones importantes en tiempo real\n2: Mostrar todas las acciones en tiempo real: '))
+                        if input_ in (0, 1, 2):
+                            break
+                    except Exception:
+                        print('Entrada inválida')
+                Scraper.verbose = input_
+            if settings == 4:
+                while True:
+                    try:
+                        input_ = int(
+                            input('0: Desactivar registro de acciones\n1: Activar registro de acciones'))
+                        if input_ in (0, 1):
+                            break
+                    except Exception:
+                        print('Entrada inválida')
+                Scraper.reg = input_
+            if settings == 5:
+                while True:
+                    try:
+                        input_ = int(
+                            input('Tiempo de espera (segundos) en caso de mala conexión: '))
+                        break
+                    except Exception:
+                        print('Entrada inválida')
+                Scraper.s = input_
+
+            # Si se selecciona 0, terminar el loop y continuar
+            if settings == 0:
+                break
+            # Se se selecciona una entrada inválida, volver a preguntar
+        except Exception:
+            print('Entrada inválida')
 
 
-def backup(file='Recibidas.csv'):
+def backup(file=None):
+    if file is None:
+        file = 'Muestras.csv'
     shutil.copyfile(
         file, file[:-4]+' '+str(datetime.now()).replace(':', "'")[:-10]+'.csv')
 
 
-def import_data(file='Recibidas.csv'):
-    backup(file)
-    dataframe = pd.read_csv(file, dtype=non_date_col_types,
-                            parse_dates=date_cols, dayfirst=True).dropna(how='all')
-    return dataframe
+def info(step, variable='x'):
+    # Filtro en caso de que no se requiera executar la función request() para obtener información
+    if Scraper.verbose > 0 or Scraper.reg:
+        request(step, variable)
 
 
-def save_data(dataframe, file):
-    dataframe.to_csv(file, index=False)
+def request(step, variable):
+    # Definir el diccionario de comentarios
+    commentaries = {
+        'load': [f'Cargando {variable}', f'Cargando {variable}'],
+        'login': ['Iniciando sesión', 'Iniciando sesión'],
+        'reset': [f'Buscando cliente {variable}...', f'Buscando cliente {variable}...'],
+        'scan': [f'Buscando en la página {variable}', f'Buscando en la página {variable}'],
+        'row': [f'Extrayendo fila {variable}'],
+        'next': [f'Siguiente página {variable}', f'Siguiente página {variable}'],
+        'missing': [f'No hay página {variable}', f'No hay página {variable}'],
+        'last': [f'Saltando a las páginas {variable}s', f'Saltando a las páginas {variable}s'],
+        'last missing': [f'No hay páginas {variable}s', f'No hay páginas {variable}s'],
+        'prev': [f'Regresando a la página anterior', 'Regresando a la página anterior'],
+        'no prev': [f'No hay página anterior', 'No hay página anterior'],
+        'first': [f'Saltando al inicio de las páginas {variable}s', f'Saltando al inicio de las páginas {variable}s'],
+        'no first': ['No se puede acceder al inicio del bloque de páginas', 'No se puede acceder al inicio del bloque de páginas'],
+        'save': [f'Guardando en {variable}', f'Guardando en {variable}'],
+    }
+    # Verificar si está activado el registro de acciones
+    if Scraper.reg:
+        Scraper.registry.append((datetime.now(), commentaries[step][0]))
+    # Verificar el nivel de información en tiempo real que se requiere
+    if Scraper.verbose == 1:
+        # Si es nivel 1, intentar acceder al índice 1 que contiene solo la información necesaria para el nivel 1
+        try:
+            print(commentaries[step][1])
+        except Exception:
+            pass
+    elif Scraper.verbose == 2:
+        # Si es nivel 2, acceder al índice 0 que contiene toda la información
+        print(commentaries[step][0])
 
 
-def actualizar(file='Recibidas.csv', clients=pd.read_csv('Clientes.csv')['Clientes'], day=datetime.today().day, month=datetime.today().month, year=datetime.today().year, n=10, up_to_date=True, to_day=datetime.today().day, to_month=datetime.today().month, to_year=datetime.today().year, skip=False):
-    global i
-    global verbose
-    if verbose:
-        print('import_data()')
-    dataframe = import_data(file)
-    input_day = input('Día: ')
-    if input_day != '':
-        day = int(input_day)
-
-    input_month = input('Mes: ')
-    if input_month != '':
-        month = int(input_month)
-
-    input_year = input('Año: ')
-    if input_year != '':
-        year = int(input_year)
-
-    input_up_to_date = input('¿A la fecha?: ')
-    try:
-        if input_up_to_date.upper()[0] == 'N':
-            up_to_date = False
-    except:
-        pass
-
-    if up_to_date:
-        pass
-    else:
-        input_to_day = input('Día: ')
-        if input_to_day != '':
-            to_day = int(input_to_day)
-
-        input_to_month = input('Mes: ')
-        if input_to_month != '':
-            to_month = int(input_to_month)
-
-        input_to_year = input('Año: ')
-        if input_to_year != '':
-            to_year = int(input_to_year)
-
-    input_clients = input('Clientes (separados con comas): ')
-    if input_clients != '':
-        clients = [cliente.strip() for cliente in input_clients.split(',')]
-        if len(clients) == 1:
-            input_skip = input('Saltar páginas: ')
-            try:
-                if input_skip.upper()[0] == 'S':
-                    skip = True
-            except:
-                pass
-            if skip:
-                if verbose:
-                    print('get_client()')
-                get_client(clients[0])
-                if verbose:
-                    print('skip_then_append_recibidas()')
-                dataframe = skip_then_append_recibidas(
-                    dataframe, day, month, year, n, to_day, to_month, to_year)
-
-            else:
-                dataframe = append_recibidas(
-                    clients, dataframe, day, month, year, n, to_day, to_month, to_year)
-        else:
-            dataframe = append_recibidas(
-                clients, dataframe, day, month, year, n, to_day, to_month, to_year)
-    else:
-        dataframe = append_recibidas(
-            clients, dataframe, day, month, year, n, to_day, to_month, to_year)
-    if verbose:
-        print('save_data()')
-    save_data(dataframe, file)
+if __name__ == '__main__':
+    # Correr una vez la función principal del script
+    main()
+    # Ciclo para volver a correr función principal del script hasta que se seleccione salir
     while True:
-        continue_searching = input('¿Seguir buscando?: ')
-        if continue_searching == '':
+        input_ = input('¿Seguir buscando?: 0: No   1: Sí')
+        if input_ == '0':
             break
-        elif continue_searching[0].upper() == 'S':
-            if verbose:
-                print('Continuing the search')
-            backup(file)
-            input_day = input('Día: ')
-            if input_day != '':
-                day = int(input_day)
-
-            input_month = input('Mes: ')
-            if input_month != '':
-                month = int(input_month)
-
-            input_year = input('Año: ')
-            if input_year != '':
-                year = int(input_year)
-
-            input_up_to_date = input('¿A la fecha?: ')
-            try:
-                if input_up_to_date.upper()[0] == 'N':
-                    up_to_date = False
-            except:
-                pass
-
-            if up_to_date:
-                pass
-            else:
-                input_to_day = input('Día: ')
-                if input_to_day != '':
-                    to_day = int(input_to_day)
-
-                input_to_month = input('Mes: ')
-                if input_to_month != '':
-                    to_month = int(input_to_month)
-
-                input_to_year = input('Año: ')
-                if input_to_year != '':
-                    to_year = int(input_to_year)
-            dataframe = search_pages_after_stop(
-                dataframe, day, month, year, n, to_day, to_month, to_year)
-            if verbose:
-                print('save_data()')
-            save_data(dataframe, file)
+        if input_ == '1':
+            main()
         else:
-            break
-    if verbose:
-        print('Done.')
+            print('Entrada inválida')
 
-
-login()
-actualizar(n=500)
+    print(
+        f'Revisar si se extrajeron todas las muestras deseadas de los clientes {"".join(Scraper.stop)}'[:-2])
