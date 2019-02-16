@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mock Consulta Orden Trabajo</title>
+</head>
+<body>
+    <h1>Mock Consulta Orden Trabajo</h1>
+    <div>
+        <label for="ctl00_ContentMasterPage_txtcliente">Cliente:</label>
+        <input type="text" id="ctl00_ContentMasterPage_txtcliente" name="cliente">
+        <input type="submit" id="ctl00_ContentMasterPage_btnBuscar" value="Buscar">
+    </div>
+    <hr>
+    <table id="ctl00_ContentMasterPage_grdConsultaOT">
+        <tbody>
+            <!-- Header Row -->
+            <tr>
+                <th>Fecha</th>
+                <th>Recep</th>
+                <th>Folio</th>
+                <th>Cliente</th>
+                <th>Paciente</th>
+                <th>Est/Per</th>
+                <th>Label1</th>
+                <th>FecCapRes</th>
+                <th>FecLibera</th>
+                <th>SucProc</th>
+                <th>Maquilador</th>
+                <th>Label3</th>
+                <th>FecNac</th>
+            </tr>
+            <!-- Data Row 1 (index 2 in scraper) -->
+            <tr>
+                <td><span id="ctl00_ContentMasterPage_grdConsultaOT_ctl02_lblFechaGrd">01/02/2023 10:00:00 AM</span></td>
+                <td><span id="ctl00_ContentMasterPage_grdConsultaOT_ctl02_lblFechaRecep">01/02/2023 11:00:00 AM</span></td>
+                <td><span id="ctl00_ContentMasterPage_grdConsultaOT_ctl02_lblFolioGrd">12345</span></td>
+                <td><span id="ctl00_ContentMasterPage_grdConsultaOT_ctl02_lblClienteGrd">101</span></td>
+                <td><span id="ctl00_ContentMasterPage_grdConsultaOT_ctl02_lblPacienteGrd">202</span></td>
+                <td><span id="ctl00_ContentMasterPage_grdConsultaOT_ctl02_lblEstPerGrd">303</span></td>
+                <td><span id="ctl00_ContentMasterPage_grdConsultaOT_ctl02_Label1">Some Label 1</span></td>
+                <td><span id="ctl00_ContentMasterPage_grdConsultaOT_ctl02_lblFecCapRes">01/02/2023 12:00:00 PM</span></td>
+                <td><span id="ctl00_ContentMasterPage_grdConsultaOT_ctl02_lblFecLibera">01/02/2023 01:00:00 PM</span></td>
+                <td><span id="ctl00_ContentMasterPage_grdConsultaOT_ctl02_lblSucProc">Branch A</span></td>
+                <td><span id="ctl00_ContentMasterPage_grdConsultaOT_ctl02_lblMaquilador">Maq X</span></td>
+                <td><span id="ctl00_ContentMasterPage_grdConsultaOT_ctl02_Label3">Some Label 3</span></td>
+                <td><span id="ctl00_ContentMasterPage_grdConsultaOT_ctl02_lblFecNac">15/05/1990</span></td>
+            </tr>
+            <!-- Data Row 2 (index 3 in scraper) -->
+            <tr>
+                <td><span id="ctl00_ContentMasterPage_grdConsultaOT_ctl03_lblFechaGrd">02/02/2023 09:30:00 AM</span></td>
+                <td><span id="ctl00_ContentMasterPage_grdConsultaOT_ctl03_lblFechaRecep">02/02/2023 10:30:00 AM</span></td>
+                <td><span id="ctl00_ContentMasterPage_grdConsultaOT_ctl03_lblFolioGrd">12346</span></td>
+                <td><span id="ctl00_ContentMasterPage_grdConsultaOT_ctl03_lblClienteGrd">102</span></td>
+                <td><span id="ctl00_ContentMasterPage_grdConsultaOT_ctl03_lblPacienteGrd">203</span></td>
+                <td><span id="ctl00_ContentMasterPage_grdConsultaOT_ctl03_lblEstPerGrd">304</span></td>
+                <td><span id="ctl00_ContentMasterPage_grdConsultaOT_ctl03_Label1">Another Label 1</span></td>
+                <td><span id="ctl00_ContentMasterPage_grdConsultaOT_ctl03_lblFecCapRes">02/02/2023 11:30:00 AM</span></td>
+                <td><span id="ctl00_ContentMasterPage_grdConsultaOT_ctl03_lblFecLibera">02/02/2023 12:30:00 PM</span></td>
+                <td><span id="ctl00_ContentMasterPage_grdConsultaOT_ctl03_lblSucProc">Branch B</span></td>
+                <td><span id="ctl00_ContentMasterPage_grdConsultaOT_ctl03_lblMaquilador">Maq Y</span></td>
+                <td><span id="ctl00_ContentMasterPage_grdConsultaOT_ctl03_Label3">Another Label 3</span></td>
+                <td><span id="ctl00_ContentMasterPage_grdConsultaOT_ctl03_lblFecNac">20/10/1985</span></td>
+            </tr>
+            <!-- ... more data rows ... -->
+            <!-- Pagination Row -->
+            <tr class="pagination-row">
+                <td colspan="13">
+                    <table>
+                        <tbody>
+                            <tr>
+                                <td><span>1</span></td>
+                                <td><a href="#">2</a></td>
+                                <td><a href="#">3</a></td>
+                                <td><a href="#">...</a></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+    <span id="ctl00_ContentMasterPage_lblUsuarioCaptura">101</span>
+</body>
+</html>
