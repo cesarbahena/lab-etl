@@ -1,0 +1,13 @@
+# Don't commit sensitive data
+*.csv
+Clientes.csv
+Muestras.csv
+
+# Log files
+*.log
+
+# Chrome driver
+chromedriver
+
+# Backup files
+*Respaldo*
