@@ -67,10 +67,12 @@ class LIMSConfig:
         
         # Scraping parameters
         self.start_date = datetime.now() - timedelta(days=1)
-        self.end_date = datetime(2021, 1, 15)
+        end_date_str = os.getenv('LIMS_END_DATE', '2021-01-15')
+        self.end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
         self.max_fails = 30
         self.sleep_time = 2
         self.output_file = 'Muestras.csv'
+        self.test_clients = [101, 102]
 
 
 class ModernScraper:
@@ -325,7 +327,7 @@ def main():
         master_df = load_existing_data(config.output_file)
         
         # For testing, use a single client. In production, this could be configurable
-        test_clients = [101, 102]  # Using clients from your mockup data
+        test_clients = config.test_clients  # Using clients from your mockup data
         
         for client_id in test_clients:
             reg.info(f'Starting scrape for client {client_id}')
