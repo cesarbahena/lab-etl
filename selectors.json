@@ -1,0 +1,11 @@
+{
+  "LOGIN_USERNAME_FIELD": "Login1_UserName",
+  "LOGIN_PASSWORD_FIELD": "Login1_Password",
+  "LOGIN_BUTTON": "Login1_LoginButton",
+  "LOGIN_SUCCESS_CHECK": "//*[@id=\"aspnetForm\"]/div[3]/div[1]/div/div/div/div[1]/span",
+  "CLIENT_INPUT_FIELD": "ctl00_ContentMasterPage_txtcliente",
+  "CLIENT_SEARCH_BUTTON": "ctl00_ContentMasterPage_btnBuscar",
+  "CLIENT_CURRENT_USER_LABEL": "//*[@id=\"ctl00_ContentMasterPage_lblUsuarioCaptura\"]",
+  "GRID_ROW_BASE": "ctl00_ContentMasterPage_grdConsultaOT_ctl",
+  "GRID_PAGINATION_BASE": "//*[@id=\"ctl00_ContentMasterPage_grdConsultaOT\"]/tbody/tr[12]/td/table/tbody/tr/td"
+}

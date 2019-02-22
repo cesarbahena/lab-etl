@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 LIMS Sample Tracker ETL Pipeline
-Modern version with updated Selenium syntax and improved structure
 """
 
 from selenium import webdriver
@@ -15,7 +14,11 @@ import shutil
 import logging
 import pathlib
 import os
+import json
+from dotenv import load_dotenv
 from typing import Dict, List, Optional
+
+load_dotenv() # Load environment variables from .env file
 
 # Configure logging
 logging.basicConfig(
@@ -55,7 +58,7 @@ class LIMSConfig:
     """Configuration class for LIMS credentials and settings"""
     
     def __init__(self):
-        # Get credentials from environment variables (secure)
+        # Get credentials from environment variables
         self.username = os.getenv('LIMS_USERNAME', 'demo_user')
         self.password = os.getenv('LIMS_PASSWORD', 'demo_pass')
         
@@ -74,9 +77,18 @@ class LIMSConfig:
         self.output_file = 'Muestras.csv'
         self.test_clients = [101, 102]
 
+        # Load UI selectors from JSON file
+        try:
+            with open('selectors.json', 'r') as f:
+                self.selectors = json.load(f)
+        except FileNotFoundError:
+            raise FileNotFoundError("selectors.json not found. Please create it with UI selectors.")
+        except json.JSONDecodeError:
+            raise json.JSONDecodeError("Error decoding selectors.json. Check file format for valid JSON.", doc="", pos=0)
+
 
 class ModernScraper:
-    """Modernized LIMS web scraper with updated Selenium syntax"""
+    """LIMS web scraper"""
     
     def __init__(self, client_id: int, config: LIMSConfig):
         self.client = client_id
@@ -98,7 +110,7 @@ class ModernScraper:
             reg.info("Browser closed")
     
     def start_driver(self):
-        """Initialize Chrome WebDriver with modern syntax"""
+        """Initialize Chrome WebDriver"""
         try:
             service = Service('./chromedriver')
             self.driver = webdriver.Chrome(service=service, options=self.config.chrome_options)
@@ -111,7 +123,7 @@ class ModernScraper:
         """Login to LIMS system with error handling"""
         try:
             # Check if already logged in
-            self.driver.find_element(By.XPATH, '//*[@id="aspnetForm"]/div[3]/div[1]/div/div/div/div[1]/span')
+            self.driver.find_element(By.XPATH, self.config.selectors["LOGIN_SUCCESS_CHECK"])
             reg.info("Already logged in")
             return True
         except:
@@ -121,9 +133,9 @@ class ModernScraper:
                 self.driver.get(login_path)
                 
                 # Enter credentials
-                self.driver.find_element(By.ID, 'Login1_UserName').send_keys(self.config.username)
-                self.driver.find_element(By.ID, 'Login1_Password').send_keys(self.config.password)
-                self.driver.find_element(By.ID, 'Login1_LoginButton').click()
+                self.driver.find_element(By.ID, self.config.selectors["LOGIN_USERNAME_FIELD"]).send_keys(self.config.username)
+                self.driver.find_element(By.ID, self.config.selectors["LOGIN_PASSWORD_FIELD"]).send_keys(self.config.password)
+                self.driver.find_element(By.ID, self.config.selectors["LOGIN_BUTTON"]).click()
                 
                 sleep(self.config.sleep_time * 2)
                 reg.info("Login successful")
@@ -139,7 +151,7 @@ class ModernScraper:
             # Check current client
             try:
                 current_client_element = self.driver.find_element(
-                    By.XPATH, '//*[@id="ctl00_ContentMasterPage_lblUsuarioCaptura"]'
+                    By.XPATH, self.config.selectors["CLIENT_CURRENT_USER_LABEL"]
                 )
                 current_client = int(current_client_element.text)
                 
@@ -155,10 +167,10 @@ class ModernScraper:
             self.driver.get(consulta_path)
             
             # Enter client ID and search
-            client_input = self.driver.find_element(By.ID, 'ctl00_ContentMasterPage_txtcliente')
+            client_input = self.driver.find_element(By.ID, self.config.selectors["CLIENT_INPUT_FIELD"])
             client_input.clear()
             client_input.send_keys(str(self.client))
-            self.driver.find_element(By.ID, 'ctl00_ContentMasterPage_btnBuscar').click()
+            self.driver.find_element(By.ID, self.config.selectors["CLIENT_SEARCH_BUTTON"]).click()
             
             sleep(self.config.sleep_time * 2)
             reg.info(f'Successfully navigated to client {self.client}')
@@ -171,7 +183,7 @@ class ModernScraper:
     def extract_cell_data(self, row: int, col: str) -> str:
         """Extract data from a specific grid cell"""
         try:
-            element_id = f'ctl00_ContentMasterPage_grdConsultaOT_ctl{str(row).zfill(2)}{col}'
+            element_id = f'{self.config.selectors["GRID_ROW_BASE"]}{str(row).zfill(2)}{col}'
             element = self.driver.find_element(By.ID, element_id)
             return element.text
         except Exception as e:
@@ -209,7 +221,7 @@ class ModernScraper:
         """Scan current page for sample data within date range"""
         samples_found = 0
         
-        # Scan rows 2-11 (following your original logic)
+        # Scan rows 2-11
         for row in range(2, 12):
             try:
                 reception_date = self.parse_date(row, '_lblFechaRecep')
@@ -244,7 +256,7 @@ class ModernScraper:
         """Check if there's a next page available"""
         try:
             next_page_link = self.driver.find_element(
-                By.XPATH, f'//*[@id="ctl00_ContentMasterPage_grdConsultaOT"]/tbody/tr[12]/td/table/tbody/tr/td[{self.current_page + 1}]/a'
+                By.XPATH, f'{self.config.selectors["GRID_PAGINATION_BASE"]}[{self.current_page + 1}]/a'
             )
             return True
         except:
@@ -254,7 +266,7 @@ class ModernScraper:
         """Navigate to the next page"""
         try:
             next_page_link = self.driver.find_element(
-                By.XPATH, f'//*[@id="ctl00_ContentMasterPage_grdConsultaOT"]/tbody/tr[12]/td/table/tbody/tr/td[{self.current_page + 1}]/a'
+                By.XPATH, f'{self.config.selectors["GRID_PAGINATION_BASE"]}[{self.current_page + 1}]/a'
             )
             next_page_link.click()
             self.current_page += 1
@@ -327,7 +339,7 @@ def main():
         master_df = load_existing_data(config.output_file)
         
         # For testing, use a single client. In production, this could be configurable
-        test_clients = config.test_clients  # Using clients from your mockup data
+        test_clients = config.test_clients
         
         for client_id in test_clients:
             reg.info(f'Starting scrape for client {client_id}')
