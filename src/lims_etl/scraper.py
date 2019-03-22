@@ -87,7 +87,7 @@ class LIMSConfig:
             raise json.JSONDecodeError("Error decoding selectors.json. Check file format for valid JSON.", doc="", pos=0)
 
 
-class ModernScraper:
+class Scraper:
     """LIMS web scraper"""
     
     def __init__(self, client_id: int, config: LIMSConfig):
@@ -345,7 +345,7 @@ def main():
             reg.info(f'Starting scrape for client {client_id}')
             
             try:
-                with ModernScraper(client_id, config) as scraper:
+                with Scraper(client_id, config) as scraper:
                     samples_count = scraper.scrape_client_data()
                     
                     # Convert scraped data to DataFrame
