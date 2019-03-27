@@ -6,7 +6,6 @@ LIMS Sample Tracker ETL Pipeline
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.support.ui import Select
 from time import sleep
 from datetime import datetime, timedelta
 import pandas as pd
@@ -91,6 +90,8 @@ class Scraper:
     """LIMS web scraper"""
     
     def __init__(self, client_id: int, config: LIMSConfig):
+        if not isinstance(client_id, int) or client_id <= 0:
+            raise ValueError("client_id must be a positive integer")
         self.client = client_id
         self.config = config
         self.driver: Optional[webdriver.Chrome] = None
