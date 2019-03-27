@@ -197,11 +197,7 @@ class Scraper:
             if not date_text:
                 return pd.NaT
             
-            # Handle the AM/PM format from your mockup data
-            date_part = date_text[:-3] if len(date_text) > 3 else date_text
-            am_pm = date_text[-2:] if len(date_text) > 2 else ""
-            
-            return datetime.strptime(f'{date_part} {am_pm}', '%d/%m/%Y %I:%M:%S %p')
+            return datetime.strptime(date_text, '%d/%m/%Y %I:%M:%S %p')
         except Exception as e:
             reg.debug(f"Could not parse date from row {row}, column {col}: {e}")
             return pd.NaT
