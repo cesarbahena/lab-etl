@@ -259,7 +259,7 @@ class Scraper:
                 By.XPATH, f'{self.config.selectors["GRID_PAGINATION_BASE"]}[{self.current_page + 1}]/a'
             )
             return True
-        except:
+        except Exception:
             return False
     
     def go_to_next_page(self) -> bool:
