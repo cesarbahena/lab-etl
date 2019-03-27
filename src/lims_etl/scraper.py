@@ -126,7 +126,7 @@ class Scraper:
             self.driver.find_element(By.XPATH, self.config.selectors["LOGIN_SUCCESS_CHECK"])
             reg.info("Already logged in")
             return True
-        except:
+        except Exception:
             try:
                 reg.info('Logging into LIMS')
                 login_path = f'file://{pathlib.Path("login.html").resolve()}'
@@ -158,7 +158,7 @@ class Scraper:
                 if current_client == self.client:
                     reg.info(f'Already viewing client {self.client}')
                     return True
-            except:
+            except Exception:
                 pass
             
             # Navigate to consultation page
