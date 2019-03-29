@@ -1,2 +1,26 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lims-sample-tracker-etl"
+version = "0.1.0"
+description = "LIMS Sample Tracker ETL Pipeline"
+authors = [{name = "cesarbahena", email = "cabahenac@gmail.com"}]
+dependencies = [
+    "selenium",
+    "pandas",
+    "python-dotenv",
+]
+
+[project.scripts]
+lims-scraper = "lims_etl.scraper:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
