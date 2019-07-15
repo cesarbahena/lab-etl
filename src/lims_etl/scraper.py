@@ -81,7 +81,7 @@ class LIMSConfig:
             with open('selectors.json', 'r') as f:
                 self.selectors = json.load(f)
         except FileNotFoundError:
-            raise FileNotFoundError("selectors.json not found. Please create it with UI selectors.")
+            raise FileNotFoundError("selectors.json not found. Create this file with LIMS UI element selectors.")
         except json.JSONDecodeError:
             raise json.JSONDecodeError("Error decoding selectors.json. Check file format for valid JSON.", doc="", pos=0)
 
@@ -214,7 +214,7 @@ class Scraper:
             reg.debug(f"Could not parse birth date from row {row}: {e}")
             return pd.NaT
     
-    def scan_page(self):
+    def scan_page(self) -> int:
         """Scan current page for sample data within date range"""
         samples_found = 0
         
@@ -274,7 +274,7 @@ class Scraper:
             reg.warning(f'Cannot navigate to page {self.current_page + 1}: {e}')
             return False
     
-    def scrape_client_data(self):
+    def scrape_client_data(self) -> int:
         """Main scraping method for a client"""
         if not self.login():
             raise Exception("Login failed")
@@ -314,7 +314,7 @@ def load_existing_data(filename: str) -> pd.DataFrame:
     """Load existing CSV data if available"""
     if os.path.exists(filename):
         reg.info(f'Loading existing data from {filename}')
-        return pd.read_csv(filename, dtype=non_date_dtypes, parse_dates=parse_cols, dayfirst=True)
+        return pd.read_csv(filename, dtype=non_date_dtypes, parse_dates=parse_cols, date_format='%Y-%m-%d %H:%M:%S')
     else:
         reg.info('No existing data file found, starting fresh')
         return pd.DataFrame({col: [] for col in cols})
