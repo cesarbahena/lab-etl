@@ -11,3 +11,26 @@ chromedriver
 
 # Backup files
 *Respaldo*
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Testing
+*.db
+test-*.sh
+
+# IDE and editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Development files
+PLAN.md
+test_*.py
+*test*.py
