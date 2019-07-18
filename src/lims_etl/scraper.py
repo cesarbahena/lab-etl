@@ -5,19 +5,15 @@ LIMS Sample Tracker ETL Pipeline
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
 from time import sleep
 from datetime import datetime, timedelta
 import pandas as pd
 import logging
 import pathlib
-import os
-import json
-from dotenv import load_dotenv
 from typing import Dict, List, Optional
 from .database import DatabaseManager
-
-load_dotenv() # Load environment variables from .env file
+from .config import LIMSConfig
+from .browser import Browser
 
 # Configure logging
 logging.basicConfig(
@@ -51,41 +47,6 @@ cols = list(dtypes.keys())
 date_cols = ['_lblFechaGrd', '_lblFechaRecep', '_lblFecCapRes', '_lblFecLibera', '_lblFecNac']
 
 
-class LIMSConfig:
-    """Configuration class for LIMS credentials and settings"""
-    
-    def __init__(self):
-        # Get credentials from environment variables
-        self.username = os.getenv('LIMS_USERNAME', 'demo_user')
-        self.password = os.getenv('LIMS_PASSWORD', 'demo_pass')
-        
-        # Chrome options for WSL/headless operation
-        self.chrome_options = webdriver.ChromeOptions()
-        self.chrome_options.add_argument('--headless')
-        self.chrome_options.add_argument('--no-sandbox')
-        self.chrome_options.add_argument('--disable-dev-shm-usage')
-        
-        # Scraping parameters
-        self.start_date = datetime.now() - timedelta(days=1)
-        end_date_str = os.getenv('LIMS_END_DATE', '2021-01-15')
-        self.end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
-        self.max_fails = 30
-        self.sleep_time = 2
-        self.test_clients = [101, 102]
-        
-        # Database configuration
-        self.db_manager = DatabaseManager()
-        self.db_manager.create_tables()
-
-        # Load UI selectors from JSON file
-        try:
-            with open('selectors.json', 'r') as f:
-                self.selectors = json.load(f)
-        except FileNotFoundError:
-            raise FileNotFoundError("selectors.json not found. Create this file with LIMS UI element selectors.")
-        except json.JSONDecodeError:
-            raise json.JSONDecodeError("Error decoding selectors.json. Check file format for valid JSON.", doc="", pos=0)
-
 
 class Scraper:
     """LIMS web scraper"""
@@ -95,6 +56,7 @@ class Scraper:
             raise ValueError("client_id must be a positive integer")
         self.client = client_id
         self.config = config
+        self.browser = Browser(config)
         self.driver: Optional[webdriver.Chrome] = None
         self.data: Dict[str, List] = {col: [] for col in cols}
         self.fails = 0
@@ -102,24 +64,12 @@ class Scraper:
         
     def __enter__(self):
         """Context manager entry"""
-        self.start_driver()
+        self.driver = self.browser.__enter__()
         return self
         
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit - ensures driver cleanup"""
-        if self.driver:
-            self.driver.quit()
-            reg.info("Browser closed")
-    
-    def start_driver(self):
-        """Initialize Chrome WebDriver"""
-        try:
-            service = Service('./chromedriver')
-            self.driver = webdriver.Chrome(service=service, options=self.config.chrome_options)
-            reg.info("Chrome driver initialized successfully")
-        except Exception as e:
-            reg.error(f"Failed to start Chrome driver: {e}")
-            raise
+        self.browser.__exit__(exc_type, exc_val, exc_tb)
     
     def login(self) -> bool:
         """Login to LIMS system with error handling"""
