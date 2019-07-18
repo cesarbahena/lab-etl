@@ -61,3 +61,67 @@ def test_get_sample_count(test_db):
     test_db.save_samples(sample_data)
     
     assert test_db.get_sample_count() == 1
+
+
+def test_duplicate_handling(test_db):
+    """Test that duplicate samples are handled properly"""
+    sample_data = [{
+        '_lblFechaGrd': datetime(2023, 1, 1, 10, 0, 0),
+        '_lblFechaRecep': datetime(2023, 1, 1, 11, 0, 0),
+        '_lblFolioGrd': 12345,
+        '_lblClienteGrd': 101,
+        '_Label1': 'Original Label'
+    }]
+    
+    # Insert first time
+    count1 = test_db.save_samples(sample_data)
+    assert count1 == 1
+    assert test_db.get_sample_count() == 1
+    
+    # Insert same data again (should update, not duplicate)
+    sample_data[0]['_Label1'] = 'Updated Label'
+    count2 = test_db.save_samples(sample_data)
+    assert count2 == 1
+    assert test_db.get_sample_count() == 1  # Still only 1 record
+    
+    # Verify the data was updated
+    session = test_db.get_session()
+    try:
+        from lims_etl.database import Sample
+        sample = session.query(Sample).first()
+        assert sample.label1 == 'Updated Label'
+    finally:
+        session.close()
+
+
+def test_upsert_mixed_data(test_db):
+    """Test upsert with mix of new and existing data"""
+    # Insert initial data
+    initial_data = [{
+        '_lblFechaRecep': datetime(2023, 1, 1, 11, 0, 0),
+        '_lblFolioGrd': 100,
+        '_lblClienteGrd': 101,
+        '_Label1': 'Sample 1'
+    }]
+    test_db.save_samples(initial_data)
+    assert test_db.get_sample_count() == 1
+    
+    # Mix of existing and new data
+    mixed_data = [
+        {  # This exists - should update
+            '_lblFechaRecep': datetime(2023, 1, 1, 11, 0, 0),
+            '_lblFolioGrd': 100,
+            '_lblClienteGrd': 101,
+            '_Label1': 'Updated Sample 1'
+        },
+        {  # This is new - should insert
+            '_lblFechaRecep': datetime(2023, 1, 2, 11, 0, 0),
+            '_lblFolioGrd': 200,
+            '_lblClienteGrd': 102,
+            '_Label1': 'Sample 2'
+        }
+    ]
+    
+    count = test_db.save_samples(mixed_data)
+    assert count == 2  # Processed 2 records
+    assert test_db.get_sample_count() == 2  # Total 2 unique records
