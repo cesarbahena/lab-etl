@@ -9,20 +9,23 @@ from selenium.common.exceptions import (
 from selenium import webdriver
 
 from lims_etl.scraper import Scraper, LIMSConfig
+from lims_etl.database import DatabaseManager
 
 @pytest.fixture
 def scraper() -> Scraper:
     """Fixture to create a Scraper instance with a mock driver and config."""
-    config = LIMSConfig()
-    config.sleep_time = 0 
-    config.selectors = {
-        "GRID_PAGINATION_BASE": "//*[@id='pagination-base']"
-    }
-    
-    s = Scraper(client_id=101, config=config)
-    s.driver = MagicMock(spec=webdriver.Chrome)
-    s.current_page = 1
-    return s
+    with patch.object(DatabaseManager, '__init__', return_value=None), \
+         patch.object(DatabaseManager, 'create_tables', return_value=None):
+        config = LIMSConfig()
+        config.sleep_time = 0 
+        config.selectors = {
+            "GRID_PAGINATION_BASE": "//*[@id='pagination-base']"
+        }
+        
+        s = Scraper(client_id=101, config=config)
+        s.driver = MagicMock(spec=webdriver.Chrome)
+        s.current_page = 1
+        return s
 
 def test_has_next_page_success(scraper: Scraper):
     """Test that has_next_page returns True when the next page element exists."""
