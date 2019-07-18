@@ -9,13 +9,13 @@ from selenium.webdriver.chrome.service import Service
 from time import sleep
 from datetime import datetime, timedelta
 import pandas as pd
-import shutil
 import logging
 import pathlib
 import os
 import json
 from dotenv import load_dotenv
 from typing import Dict, List, Optional
+from .database import DatabaseManager
 
 load_dotenv() # Load environment variables from .env file
 
@@ -49,8 +49,6 @@ dtypes = {
 
 cols = list(dtypes.keys())
 date_cols = ['_lblFechaGrd', '_lblFechaRecep', '_lblFecCapRes', '_lblFecLibera', '_lblFecNac']
-non_date_dtypes = {k: v for k, v in dtypes.items() if k not in date_cols}
-parse_cols = [0, 1, 7, 8, 12]
 
 
 class LIMSConfig:
@@ -73,8 +71,11 @@ class LIMSConfig:
         self.end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
         self.max_fails = 30
         self.sleep_time = 2
-        self.output_file = 'Muestras.csv'
         self.test_clients = [101, 102]
+        
+        # Database configuration
+        self.db_manager = DatabaseManager()
+        self.db_manager.create_tables()
 
         # Load UI selectors from JSON file
         try:
@@ -301,62 +302,42 @@ class Scraper:
         return total_samples
 
 
-def create_backup(filename: str):
-    """Create backup of existing file"""
-    if os.path.exists(filename):
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        backup_name = f'Respaldo_{timestamp}.csv'
-        shutil.copyfile(filename, backup_name)
-        reg.info(f'Backup created: {backup_name}')
-
-
-def load_existing_data(filename: str) -> pd.DataFrame:
-    """Load existing CSV data if available"""
-    if os.path.exists(filename):
-        reg.info(f'Loading existing data from {filename}')
-        return pd.read_csv(filename, dtype=non_date_dtypes, parse_dates=parse_cols, date_format='%Y-%m-%d %H:%M:%S')
-    else:
-        reg.info('No existing data file found, starting fresh')
-        return pd.DataFrame({col: [] for col in cols})
-
-
-def save_data(df: pd.DataFrame, filename: str):
-    """Save DataFrame to CSV"""
-    reg.info(f'Saving data to {filename}')
-    df.to_csv(filename, index=False)
+def prepare_sample_data(scraper_data: Dict[str, List]) -> List[Dict]:
+    """Convert scraper data format to database format"""
+    samples = []
+    num_samples = len(scraper_data[cols[0]]) if cols else 0
+    
+    for i in range(num_samples):
+        sample = {}
+        for col in cols:
+            if col in scraper_data and i < len(scraper_data[col]):
+                sample[col] = scraper_data[col][i]
+        samples.append(sample)
+    
+    return samples
 
 
 def main():
     """Main execution function"""
     try:
         config = LIMSConfig()
+        total_samples = 0
         
-        # Load existing data
-        create_backup(config.output_file)
-        master_df = load_existing_data(config.output_file)
-        
-        # For testing, use a single client. In production, this could be configurable
-        test_clients = config.test_clients
-        
-        for client_id in test_clients:
+        for client_id in config.test_clients:
             reg.info(f'Starting scrape for client {client_id}')
             
             try:
                 with Scraper(client_id, config) as scraper:
                     samples_count = scraper.scrape_client_data()
                     
-                    # Convert scraped data to DataFrame
-                    client_df = pd.DataFrame(scraper.data)
-                    if not client_df.empty:
-                        # Apply data types
-                        client_df = client_df.astype(dtype=dtypes, errors='ignore')
+                    if scraper.data and any(scraper.data.values()):
+                        # Convert scraper data to database format
+                        sample_records = prepare_sample_data(scraper.data)
                         
-                        # Append to master DataFrame
-                        master_df = pd.concat([master_df, client_df], ignore_index=True)
-                        
-                        # Save after each client (incremental backup)
-                        save_data(master_df, config.output_file)
-                        reg.info(f'Client {client_id} completed: {samples_count} samples processed')
+                        # Save to database
+                        saved_count = config.db_manager.save_samples(sample_records)
+                        reg.info(f'Client {client_id} completed: {saved_count} samples saved to database')
+                        total_samples += saved_count
                     else:
                         reg.warning(f'No data found for client {client_id}')
                         
@@ -364,7 +345,8 @@ def main():
                 reg.error(f'Error processing client {client_id}: {e}')
                 continue
         
-        reg.info(f'ETL pipeline completed. Final dataset: {len(master_df)} total samples')
+        final_count = config.db_manager.get_sample_count()
+        reg.info(f'ETL pipeline completed. Total samples in database: {final_count}')
         
     except Exception as e:
         reg.error(f'Critical error in main execution: {e}')

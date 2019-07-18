@@ -11,6 +11,8 @@ dependencies = [
     "selenium",
     "pandas",
     "python-dotenv",
+    "psycopg2-binary",
+    "sqlalchemy",
 ]
 
 [project.scripts]
