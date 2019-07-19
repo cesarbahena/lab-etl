@@ -1,46 +1,72 @@
 # LIMS Sample Tracker ETL
 
-Web scraper for extracting sample data from legacy LIMS system.
+Clinical laboratory sample tracking system that scrapes data from legacy LIMS web interface and stores it in PostgreSQL database.
 
-## Setup
+## Prerequisites
+
+- Python 3.10+
+- PostgreSQL 12+
+- Chrome/Chromium browser
+- ChromeDriver
+
+## Database Setup
+
+1. Install PostgreSQL if not already installed
+2. Run the database setup script:
+   ```bash
+   sudo -u postgres psql -f setup_database.sql
+   ```
+
+## Environment Setup
+
+1. Copy environment template:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Edit `.env` with your actual credentials:
+   ```bash
+   # Database is pre-configured if you ran setup_database.sql
+   DB_PASSWORD=lims_secure_pass
+   
+   # Update with your LIMS credentials
+   LIMS_USERNAME=your_actual_username
+   LIMS_PASSWORD=your_actual_password
+   ```
+
+## Installation
 
 1. Install dependencies:
-```bash
-pip install -e .
-```
+   ```bash
+   conda install psycopg2 sqlalchemy selenium pytest python-dotenv -c conda-forge
+   ```
 
-2. Install ChromeDriver:
-```bash
-# Download chromedriver and place in project root
-```
-
-3. Create configuration files:
-```bash
-cp .env.example .env  # Add credentials
-cp selectors.example.json selectors.json  # Add UI selectors
-```
+2. Install package in development mode:
+   ```bash
+   pip install -e .
+   ```
 
 ## Usage
 
-Run the scraper:
-```bash
-lims-scraper
-```
-
-Or as module:
+Run the ETL pipeline:
 ```bash
 python -m lims_etl.scraper
 ```
 
-## Testing
+## Development
 
+Run tests:
 ```bash
-pytest tests/
+pytest
 ```
 
-## Files
+## Database Schema
 
-- `src/lims_etl/scraper.py` - Main scraper logic
-- `selectors.json` - UI element selectors for web scraping
-- `consulta.html`, `login.html` - Mock HTML for testing
-- `Muestras.csv` - Output data file
+The system creates a `samples` table with the following structure:
+- `id`: Primary key
+- `fecha_grd`, `fecha_recep`, `fec_cap_res`, `fec_libera`, `fec_nac`: Date fields
+- `folio_grd`, `cliente_grd`, `paciente_grd`, `est_per_grd`: Numeric identifiers
+- `label1`, `suc_proc`, `maquilador`, `label3`: Text fields
+- `created_at`: Timestamp when record was inserted
+
+Duplicate detection is handled via unique constraint on `(folio_grd, cliente_grd, fecha_recep)`.

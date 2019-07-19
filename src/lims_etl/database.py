@@ -50,8 +50,11 @@ class DatabaseManager:
         host = os.getenv('DB_HOST', 'localhost')
         port = os.getenv('DB_PORT', '5432')
         name = os.getenv('DB_NAME', 'lims_etl')
-        user = os.getenv('DB_USER', 'postgres')
-        password = os.getenv('DB_PASSWORD', 'postgres')
+        user = os.getenv('DB_USER', 'lims_user')
+        password = os.getenv('DB_PASSWORD')
+        
+        if not password:
+            raise ValueError("DB_PASSWORD environment variable is required")
         
         return f"postgresql://{user}:{password}@{host}:{port}/{name}"
     
