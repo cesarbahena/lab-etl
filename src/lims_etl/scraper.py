@@ -81,18 +81,17 @@ class Scraper:
         except Exception:
             try:
                 reg.info('Logging into LIMS')
-                login_path = f'file://{pathlib.Path("login.html").resolve()}'
-                self.driver.get(login_path)
-                
+                self.driver.get(self.config.get_login_url())
+
                 # Enter credentials
                 self.driver.find_element(By.ID, self.config.selectors["LOGIN_USERNAME_FIELD"]).send_keys(self.config.username)
                 self.driver.find_element(By.ID, self.config.selectors["LOGIN_PASSWORD_FIELD"]).send_keys(self.config.password)
                 self.driver.find_element(By.ID, self.config.selectors["LOGIN_BUTTON"]).click()
-                
+
                 sleep(self.config.sleep_time * 2)
                 reg.info("Login successful")
                 return True
-                
+
             except Exception as e:
                 reg.error(f"Login failed: {e}")
                 return False

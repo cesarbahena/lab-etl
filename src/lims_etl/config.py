@@ -9,18 +9,22 @@ load_dotenv() # Load environment variables from .env file
 
 class LIMSConfig:
     """Configuration class for LIMS credentials and settings"""
-    
+
     def __init__(self):
         # Get credentials from environment variables
         self.username = os.getenv('LIMS_USERNAME', 'demo_user')
         self.password = os.getenv('LIMS_PASSWORD', 'demo_pass')
-        
+
+        # LIMS server configuration
+        self.base_url = os.getenv('LIMS_BASE_URL', 'http://172.16.0.117')
+        self.use_local_fixtures = os.getenv('LIMS_USE_LOCAL_FIXTURES', 'false').lower() == 'true'
+
         # Chrome options for WSL/headless operation
         self.chrome_options = webdriver.ChromeOptions()
         self.chrome_options.add_argument('--headless')
         self.chrome_options.add_argument('--no-sandbox')
         self.chrome_options.add_argument('--disable-dev-shm-usage')
-        
+
         # Scraping parameters
         self.start_date = datetime.now() - timedelta(days=1)
         end_date_str = os.getenv('LIMS_END_DATE', '2021-01-15')
@@ -28,7 +32,7 @@ class LIMSConfig:
         self.max_fails = 30
         self.sleep_time = 2
         self.test_clients = [101, 102]
-        
+
         # Database configuration
         self.db_manager = DatabaseManager()
         self.db_manager.create_tables()
@@ -41,3 +45,17 @@ class LIMSConfig:
             raise FileNotFoundError("selectors.json not found. Please create it with UI selectors.")
         except json.JSONDecodeError:
             raise json.JSONDecodeError("Error decoding selectors.json. Check file format for valid JSON.", doc="", pos=0)
+
+    def get_login_url(self) -> str:
+        """Get login page URL (production server or local test fixture)"""
+        if self.use_local_fixtures:
+            import pathlib
+            return f'file://{pathlib.Path("login.html").resolve()}'
+        return f'{self.base_url}/'
+
+    def get_consulta_url(self) -> str:
+        """Get consultation page URL (production server or local test fixture)"""
+        if self.use_local_fixtures:
+            import pathlib
+            return f'file://{pathlib.Path("consulta.html").resolve()}'
+        return f'{self.base_url}/FasePreAnalitica/ConsultaOrdenTrabajo.aspx'
