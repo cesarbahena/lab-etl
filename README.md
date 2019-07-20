@@ -1,6 +1,10 @@
 # LIMS Sample Tracker ETL
 
-Clinical laboratory sample tracking system that scrapes data from legacy LIMS web interface and stores it in PostgreSQL database.
+Clinical laboratory sample tracking system that scrapes data from legacy LIMS web interface (ASP.NET) and stores it in PostgreSQL database.
+
+## Overview
+
+This ETL pipeline connects to the on-premises LIMS server to extract sample status data and centralize it in a PostgreSQL database. The system uses Selenium WebDriver to automate browser interactions with the legacy web interface.
 
 ## Prerequisites
 
@@ -8,6 +12,7 @@ Clinical laboratory sample tracking system that scrapes data from legacy LIMS we
 - PostgreSQL 12+
 - Chrome/Chromium browser
 - ChromeDriver
+- Access to LIMS server (internal network)
 
 ## Database Setup
 
@@ -24,12 +29,18 @@ Clinical laboratory sample tracking system that scrapes data from legacy LIMS we
    cp .env.example .env
    ```
 
-2. Edit `.env` with your actual credentials:
+2. Edit `.env` with your configuration:
    ```bash
-   # Database is pre-configured if you ran setup_database.sql
+   # LIMS server (internal network address)
+   LIMS_BASE_URL=http://172.16.0.117
+
+   # For development/testing with local HTML fixtures
+   LIMS_USE_LOCAL_FIXTURES=false
+
+   # Database credentials
    DB_PASSWORD=lims_secure_pass
-   
-   # Update with your LIMS credentials
+
+   # Your LIMS credentials
    LIMS_USERNAME=your_actual_username
    LIMS_PASSWORD=your_actual_password
    ```
@@ -53,7 +64,20 @@ Run the ETL pipeline:
 python -m lims_etl.scraper
 ```
 
-## Development
+The scraper will:
+1. Connect to the LIMS server
+2. Authenticate with provided credentials
+3. Extract sample data for configured clients
+4. Store data in PostgreSQL database
+
+## Development & Testing
+
+For local development without hitting the production server, you can use the included HTML test fixtures:
+
+```bash
+# In .env, set:
+LIMS_USE_LOCAL_FIXTURES=true
+```
 
 Run tests:
 ```bash
@@ -70,3 +94,9 @@ The system creates a `samples` table with the following structure:
 - `created_at`: Timestamp when record was inserted
 
 Duplicate detection is handled via unique constraint on `(folio_grd, cliente_grd, fecha_recep)`.
+
+## Notes
+
+- The HTML fixtures (login.html, consulta.html) are for local testing only
+- Production deployment connects to the actual LIMS server at http://172.16.0.117
+- Requires access to internal laboratory network
