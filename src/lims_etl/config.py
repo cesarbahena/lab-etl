@@ -19,6 +19,11 @@ class LIMSConfig:
         self.base_url = os.getenv('LIMS_BASE_URL', 'http://172.16.0.117')
         self.use_local_fixtures = os.getenv('LIMS_USE_LOCAL_FIXTURES', 'false').lower() == 'true'
 
+        # Cloud API configuration (QuimiOSHub)
+        self.hub_api_url = os.getenv('HUB_API_URL', '')
+        self.hub_api_key = os.getenv('HUB_API_KEY', '')
+        self.sync_to_cloud = os.getenv('SYNC_TO_CLOUD', 'false').lower() == 'true'
+
         # Chrome options for WSL/headless operation
         self.chrome_options = webdriver.ChromeOptions()
         self.chrome_options.add_argument('--headless')
