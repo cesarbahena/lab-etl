@@ -117,15 +117,3 @@ class QuimiOSHubClient:
             return dt.strftime('%Y-%m-%d')
         except:
             return None
-
-    def get_sample_count(self) -> Optional[int]:
-        """Get total sample count from cloud API"""
-        try:
-            response = self.session.get(f'{self.base_url}/api/health', timeout=5)
-            if response.status_code == 200:
-                data = response.json()
-                return data.get('sampleCount')
-        except Exception as e:
-            reg.error(f"Failed to get sample count: {e}")
-
-        return None

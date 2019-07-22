@@ -11,9 +11,9 @@ import pandas as pd
 import logging
 import pathlib
 from typing import Dict, List, Optional
-from .database import DatabaseManager
 from .config import LIMSConfig
 from .browser import Browser
+from .api_client import QuimiOSHubClient
 
 # Configure logging
 logging.basicConfig(
@@ -270,33 +270,44 @@ def main():
     """Main execution function"""
     try:
         config = LIMSConfig()
-        total_samples = 0
-        
+
+        # Initialize QuimiOSHub API client (required)
+        if not config.hub_api_url:
+            raise ValueError("HUB_API_URL not configured in .env file")
+
+        reg.info(f'Initializing QuimiOSHub API client: {config.hub_api_url}')
+        hub_client = QuimiOSHubClient(config.hub_api_url, config.hub_api_key)
+
+        if not hub_client.health_check():
+            raise ConnectionError('QuimiOSHub API is not accessible. Please check the API is running.')
+
+        reg.info('QuimiOSHub API connection successful')
+        total_synced = 0
+
         for client_id in config.test_clients:
             reg.info(f'Starting scrape for client {client_id}')
-            
+
             try:
                 with Scraper(client_id, config) as scraper:
                     samples_count = scraper.scrape_client_data()
-                    
+
                     if scraper.data and any(scraper.data.values()):
-                        # Convert scraper data to database format
+                        # Convert scraper data to API format
                         sample_records = prepare_sample_data(scraper.data)
-                        
-                        # Save to database
-                        saved_count = config.db_manager.save_samples(sample_records)
-                        reg.info(f'Client {client_id} completed: {saved_count} samples saved to database')
-                        total_samples += saved_count
+
+                        # Push directly to QuimiOSHub API
+                        synced_count = hub_client.sync_samples(sample_records)
+                        reg.info(f'Client {client_id}: {synced_count}/{len(sample_records)} samples synced to QuimiOSHub')
+                        total_synced += synced_count
                     else:
                         reg.warning(f'No data found for client {client_id}')
-                        
+
             except Exception as e:
                 reg.error(f'Error processing client {client_id}: {e}')
                 continue
-        
-        final_count = config.db_manager.get_sample_count()
-        reg.info(f'ETL pipeline completed. Total samples in database: {final_count}')
-        
+
+        reg.info(f'ETL pipeline completed. Synced {total_synced} samples.')
+
     except Exception as e:
         reg.error(f'Critical error in main execution: {e}')
         raise
