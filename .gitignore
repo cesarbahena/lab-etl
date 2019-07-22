@@ -2,6 +2,7 @@
 *.csv
 Clientes.csv
 Muestras.csv
+.env
 
 # Log files
 *.log
