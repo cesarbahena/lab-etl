@@ -24,6 +24,9 @@ __pycache__/
 *.db
 test-*.sh
 
+# Generated mock pages
+consulta_page_*.html
+
 # IDE and editor
 .vscode/
 .idea/

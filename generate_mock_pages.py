@@ -171,13 +171,10 @@ def generate_page_html(page_num, cliente=101):
 
 def main():
     """Generate all 25 pages"""
-    output_dir = "mock_pages"
-    os.makedirs(output_dir, exist_ok=True)
-
     print("Generating 25 paginated HTML mock pages...")
     for page in range(1, 26):
         html = generate_page_html(page)
-        filename = f"{output_dir}/consulta_page_{page}.html"
+        filename = f"consulta_page_{page}.html"
         with open(filename, 'w', encoding='utf-8') as f:
             f.write(html)
         print(f"  Created: {filename}")
