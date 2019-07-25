@@ -199,21 +199,41 @@ class Scraper:
         reg.info(f"Found {samples_found} samples on current page")
         return samples_found
     
+    def get_current_page_position(self) -> int:
+        """Detect current page position by finding td without <a> tag"""
+        for td_index in range(1, 14):
+            try:
+                self.driver.find_element(
+                    By.XPATH, f'{self.config.selectors["GRID_PAGINATION_BASE"]}[{td_index}]/a'
+                )
+            except Exception:
+                # This td has no <a> tag, so it's the current page
+                return td_index
+        return 0
+
     def has_next_page(self) -> bool:
         """Check if there's a next page available"""
         try:
+            current_position = self.get_current_page_position()
+            if current_position == 0:
+                return False
+
             next_page_link = self.driver.find_element(
-                By.XPATH, f'{self.config.selectors["GRID_PAGINATION_BASE"]}[{self.current_page + 1}]/a'
+                By.XPATH, f'{self.config.selectors["GRID_PAGINATION_BASE"]}[{current_position + 1}]/a'
             )
             return True
         except Exception:
             return False
-    
+
     def go_to_next_page(self) -> bool:
         """Navigate to the next page"""
         try:
+            current_position = self.get_current_page_position()
+            if current_position == 0:
+                return False
+
             next_page_link = self.driver.find_element(
-                By.XPATH, f'{self.config.selectors["GRID_PAGINATION_BASE"]}[{self.current_page + 1}]/a'
+                By.XPATH, f'{self.config.selectors["GRID_PAGINATION_BASE"]}[{current_position + 1}]/a'
             )
             next_page_link.click()
             self.current_page += 1
@@ -221,7 +241,7 @@ class Scraper:
             reg.debug(f'Navigated to page {self.current_page}')
             return True
         except Exception as e:
-            reg.warning(f'Cannot navigate to page {self.current_page + 1}: {e}')
+            reg.warning(f'Cannot navigate to next page: {e}')
             return False
     
     def scrape_client_data(self) -> int:
