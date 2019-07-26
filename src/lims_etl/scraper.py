@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 import logging
 import pathlib
+import argparse
 from typing import Dict, List, Optional
 from .config import LIMSConfig
 from .browser import Browser
@@ -288,8 +289,28 @@ def prepare_sample_data(scraper_data: Dict[str, List]) -> List[Dict]:
 
 def main():
     """Main execution function"""
+    parser = argparse.ArgumentParser(description='LIMS ETL - Extract sample data from LIMS and sync to QuimiOSHub')
+    parser.add_argument('--start-date', type=str, help='Start date (YYYY-MM-DD) - newer limit')
+    parser.add_argument('--end-date', type=str, help='End date (YYYY-MM-DD) - older limit')
+    parser.add_argument('--max-fails', type=int, help='Max consecutive fails before stopping')
+    parser.add_argument('--clients', type=str, help='Comma-separated client IDs')
+    args = parser.parse_args()
+
     try:
         config = LIMSConfig()
+
+        # Override config with CLI arguments
+        if args.start_date:
+            config.start_date = datetime.strptime(args.start_date, '%Y-%m-%d')
+        if args.end_date:
+            config.end_date = datetime.strptime(args.end_date, '%Y-%m-%d')
+        if args.max_fails:
+            config.max_fails = args.max_fails
+        if args.clients:
+            config.test_clients = [int(c.strip()) for c in args.clients.split(',')]
+
+        reg.info(f'Date range: {config.start_date.date()} (newer) > samples > {config.end_date.date()} (older)')
+        reg.info(f'Max consecutive fails: {config.max_fails}')
 
         # Initialize QuimiOSHub API client (required)
         if not config.hub_api_url:

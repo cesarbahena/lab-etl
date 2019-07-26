@@ -28,12 +28,18 @@ class LIMSConfig:
         self.chrome_options.add_argument('--no-sandbox')
         self.chrome_options.add_argument('--disable-dev-shm-usage')
 
-        # Scraping parameters
-        self.start_date = datetime.now() - timedelta(days=1)
+        # Scraping parameters - date range filtering
+        start_date_str = os.getenv('LIMS_START_DATE')
+        if start_date_str:
+            self.start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+        else:
+            self.start_date = datetime.now() - timedelta(days=1)
+
         end_date_str = os.getenv('LIMS_END_DATE', '2021-01-15')
         self.end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
-        self.max_fails = 30
-        self.sleep_time = 2
+
+        self.max_fails = int(os.getenv('LIMS_MAX_FAILS', '30'))
+        self.sleep_time = int(os.getenv('LIMS_SLEEP_TIME', '2'))
         self.test_clients = [101, 102]
 
         # Load UI selectors from JSON file
