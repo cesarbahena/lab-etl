@@ -60,7 +60,7 @@ class Scraper:
         self.browser = Browser(config)
         self.driver: Optional[webdriver.Chrome] = None
         self.data: Dict[str, List] = {col: [] for col in cols}
-        self.fails = 0
+        self.empty_pages_count = 0
         self.current_page = 1
         
     def __enter__(self):
@@ -168,16 +168,16 @@ class Scraper:
     def scan_page(self) -> int:
         """Scan current page for sample data within date range"""
         samples_found = 0
-        
+
         # Scan rows 2-11
         for row in range(2, 12):
             try:
                 reception_date = self.parse_date(row, '_lblFechaRecep')
-                
+
                 # Check if within date range
                 if self.config.start_date > reception_date > self.config.end_date:
                     reg.debug(f'Extracting data from row {row-1}')
-                    
+
                     # Extract all columns
                     for col in cols:
                         if col in date_cols:
@@ -188,15 +188,12 @@ class Scraper:
                         else:
                             value = self.extract_cell_data(row, col)
                             self.data[col].append(value if value else 0)
-                    
+
                     samples_found += 1
-                else:
-                    self.fails += 1
-                    
+
             except Exception as e:
                 reg.debug(f"Error processing row {row}: {e}")
-                self.fails += 1
-        
+
         reg.info(f"Found {samples_found} samples on current page")
         return samples_found
     
@@ -249,25 +246,35 @@ class Scraper:
         """Main scraping method for a client"""
         if not self.login():
             raise Exception("Login failed")
-        
+
         if not self.navigate_to_client():
             raise Exception(f"Could not navigate to client {self.client}")
-        
-        self.fails = 0
+
+        self.empty_pages_count = 0
         total_samples = 0
-        
-        # Continue until max fails reached
-        while self.fails < self.config.max_fails:
+
+        # Continue until max consecutive empty pages reached
+        while self.empty_pages_count < self.config.max_empty_pages:
             samples_on_page = self.scan_page()
             total_samples += samples_on_page
-            
+
+            # Reset counter if we found samples, increment if page was empty
+            if samples_on_page > 0:
+                self.empty_pages_count = 0
+            else:
+                self.empty_pages_count += 1
+                reg.debug(f'Empty page {self.empty_pages_count}/{self.config.max_empty_pages}')
+
             if not self.has_next_page():
-                reg.warning(f'No more pages available for client {self.client}')
+                reg.info(f'No more pages available for client {self.client}')
                 break
-            
+
             if not self.go_to_next_page():
                 break
-        
+
+        if self.empty_pages_count >= self.config.max_empty_pages:
+            reg.info(f'Stopped after {self.empty_pages_count} consecutive empty pages')
+
         reg.info(f'Completed scraping client {self.client}. Total samples: {total_samples}')
         return total_samples
 
@@ -292,7 +299,7 @@ def main():
     parser = argparse.ArgumentParser(description='LIMS ETL - Extract sample data from LIMS and sync to QuimiOSHub')
     parser.add_argument('--start-date', type=str, help='Start date (YYYY-MM-DD) - newer limit')
     parser.add_argument('--end-date', type=str, help='End date (YYYY-MM-DD) - older limit')
-    parser.add_argument('--max-fails', type=int, help='Max consecutive fails before stopping')
+    parser.add_argument('--max-empty-pages', type=int, help='Max consecutive empty pages before stopping')
     parser.add_argument('--clients', type=str, help='Comma-separated client IDs')
     args = parser.parse_args()
 
@@ -304,13 +311,13 @@ def main():
             config.start_date = datetime.strptime(args.start_date, '%Y-%m-%d')
         if args.end_date:
             config.end_date = datetime.strptime(args.end_date, '%Y-%m-%d')
-        if args.max_fails:
-            config.max_fails = args.max_fails
+        if args.max_empty_pages:
+            config.max_empty_pages = args.max_empty_pages
         if args.clients:
             config.test_clients = [int(c.strip()) for c in args.clients.split(',')]
 
         reg.info(f'Date range: {config.start_date.date()} (newer) > samples > {config.end_date.date()} (older)')
-        reg.info(f'Max consecutive fails: {config.max_fails}')
+        reg.info(f'Max consecutive empty pages: {config.max_empty_pages}')
 
         # Initialize QuimiOSHub API client (required)
         if not config.hub_api_url:

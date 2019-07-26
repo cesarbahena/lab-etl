@@ -38,7 +38,7 @@ class LIMSConfig:
         end_date_str = os.getenv('LIMS_END_DATE', '2021-01-15')
         self.end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
 
-        self.max_fails = int(os.getenv('LIMS_MAX_FAILS', '30'))
+        self.max_empty_pages = int(os.getenv('LIMS_MAX_EMPTY_PAGES', '5'))
         self.sleep_time = int(os.getenv('LIMS_SLEEP_TIME', '2'))
         self.test_clients = [101, 102]
 
