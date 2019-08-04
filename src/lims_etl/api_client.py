@@ -59,10 +59,10 @@ class QuimiOSHubClient:
 
                 if response.status_code in [200, 201]:
                     synced_count += 1
-                    reg.debug(f"Synced sample {sample.get('_lblFolioGrd')}")
+                    reg.debug(f"Synced sample {sample.get('Folio')}")
                 elif response.status_code == 409:
                     # Duplicate - already exists
-                    reg.debug(f"Sample {sample.get('_lblFolioGrd')} already exists in cloud")
+                    reg.debug(f"Sample {sample.get('Folio')} already exists in cloud")
                     synced_count += 1
                 else:
                     reg.warning(f"Failed to sync sample: HTTP {response.status_code}")
@@ -77,19 +77,19 @@ class QuimiOSHubClient:
     def _convert_sample_format(self, sample: Dict) -> Dict:
         """Convert ETL sample format to API format"""
         return {
-            'fechaGrd': self._format_datetime(sample.get('_lblFechaGrd')),
-            'fechaRecep': self._format_datetime(sample.get('_lblFechaRecep')),
-            'folioGrd': int(sample.get('_lblFolioGrd', 0)),
-            'clienteGrd': int(sample.get('_lblClienteGrd', 0)),
-            'pacienteGrd': int(sample.get('_lblPacienteGrd', 0)),
-            'estPerGrd': int(sample.get('_lblEstPerGrd', 0)),
-            'label1': str(sample.get('_Label1', '')),
-            'fecCapRes': self._format_datetime(sample.get('_lblFecCapRes')),
-            'fecLibera': self._format_datetime(sample.get('_lblFecLibera')),
-            'sucProc': str(sample.get('_lblSucProc', '')),
-            'maquilador': str(sample.get('_lblMaquilador', '')),
-            'label3': str(sample.get('_Label3', '')),
-            'fecNac': self._format_date(sample.get('_lblFecNac'))
+            'createdAt': self._format_datetime(sample.get('CreatedAt')),
+            'receivedAt': self._format_datetime(sample.get('ReceivedAt')),
+            'folio': int(sample.get('Folio', 0)),
+            'clientId': int(sample.get('ClientId', 0)),
+            'patientId': int(sample.get('PatientId', 0)),
+            'examId': int(sample.get('ExamId', 0)),
+            'examName': str(sample.get('ExamName', '')),
+            'processedAt': self._format_datetime(sample.get('ProcessedAt')),
+            'validatedAt': self._format_datetime(sample.get('ValidatedAt')),
+            'location': str(sample.get('Location', '')),
+            'outsourcer': str(sample.get('Outsourcer', '')),
+            'priority': str(sample.get('Priority', '')),
+            'birthDate': self._format_date(sample.get('BirthDate'))
         }
 
     def _format_datetime(self, dt) -> Optional[str]:

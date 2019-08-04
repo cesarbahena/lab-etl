@@ -27,25 +27,42 @@ logging.basicConfig(
 )
 reg = logging.getLogger(__name__)
 
-# Data types for pandas DataFrame
+# Map LIMS HTML element IDs to database column names
+SELECTOR_TO_COLUMN = {
+    '_lblFechaGrd': 'CreatedAt',
+    '_lblFechaRecep': 'ReceivedAt',
+    '_lblFolioGrd': 'Folio',
+    '_lblClienteGrd': 'ClientId',
+    '_lblPacienteGrd': 'PatientId',
+    '_lblEstPerGrd': 'ExamId',
+    '_Label1': 'ExamName',
+    '_lblFecCapRes': 'ProcessedAt',
+    '_lblFecLibera': 'ValidatedAt',
+    '_lblSucProc': 'Location',
+    '_lblMaquilador': 'Outsourcer',
+    '_Label3': 'Priority',
+    '_lblFecNac': 'BirthDate'
+}
+
+# Data types for pandas DataFrame (using database column names)
 dtypes = {
-    '_lblFechaGrd': 'datetime64[ns]', 
-    '_lblFechaRecep': 'datetime64[ns]', 
-    '_lblFolioGrd': 'uint32', 
-    '_lblClienteGrd': 'uint16', 
-    '_lblPacienteGrd': 'uint16', 
-    '_lblEstPerGrd': 'uint16', 
-    '_Label1': 'category', 
-    '_lblFecCapRes': 'datetime64[ns]', 
-    '_lblFecLibera': 'datetime64[ns]', 
-    '_lblSucProc': 'category', 
-    '_lblMaquilador': 'category', 
-    '_Label3': 'category', 
-    '_lblFecNac': 'datetime64[ns]', 
+    'CreatedAt': 'datetime64[ns]',
+    'ReceivedAt': 'datetime64[ns]',
+    'Folio': 'uint32',
+    'ClientId': 'uint16',
+    'PatientId': 'uint16',
+    'ExamId': 'uint16',
+    'ExamName': 'category',
+    'ProcessedAt': 'datetime64[ns]',
+    'ValidatedAt': 'datetime64[ns]',
+    'Location': 'category',
+    'Outsourcer': 'category',
+    'Priority': 'category',
+    'BirthDate': 'datetime64[ns]',
 }
 
 cols = list(dtypes.keys())
-date_cols = ['_lblFechaGrd', '_lblFechaRecep', '_lblFecCapRes', '_lblFecLibera', '_lblFecNac']
+date_cols = ['CreatedAt', 'ReceivedAt', 'ProcessedAt', 'ValidatedAt', 'BirthDate']
 
 
 
@@ -164,10 +181,12 @@ class Scraper:
         except Exception as e:
             reg.debug(f"Could not parse birth date from row {row}: {e}")
             return pd.NaT
-    
+
     def scan_page(self) -> int:
         """Scan current page for sample data within date range"""
         samples_found = 0
+        # Reverse mapping for getting selectors from database columns
+        column_to_selector = {v: k for k, v in SELECTOR_TO_COLUMN.items()}
 
         # Scan rows 2-11
         for row in range(2, 12):
@@ -178,16 +197,18 @@ class Scraper:
                 if self.config.start_date > reception_date > self.config.end_date:
                     reg.debug(f'Extracting data from row {row-1}')
 
-                    # Extract all columns
-                    for col in cols:
-                        if col in date_cols:
-                            if col == '_lblFecNac':
-                                self.data[col].append(self.parse_birth_date(row))
+                    # Extract all columns using database column names
+                    for db_col in cols:
+                        selector = column_to_selector[db_col]
+
+                        if db_col in date_cols:
+                            if db_col == 'BirthDate':
+                                self.data[db_col].append(self.parse_birth_date(row))
                             else:
-                                self.data[col].append(self.parse_date(row, col))
+                                self.data[db_col].append(self.parse_date(row, selector))
                         else:
-                            value = self.extract_cell_data(row, col)
-                            self.data[col].append(value if value else 0)
+                            value = self.extract_cell_data(row, selector)
+                            self.data[db_col].append(value if value else 0)
 
                     samples_found += 1
 
