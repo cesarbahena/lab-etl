@@ -1,6 +1,9 @@
+"""
+Unit tests for LIMS scraper pagination and date parsing.
+"""
+
 import pytest
-from unittest.mock import MagicMock, patch, call
-from selenium.webdriver.common.by import By
+from unittest.mock import MagicMock, patch
 from selenium.common.exceptions import (
     NoSuchElementException,
     StaleElementReferenceException,
@@ -8,196 +11,216 @@ from selenium.common.exceptions import (
 )
 from selenium import webdriver
 
-from lims_etl.scraper import Scraper, LIMSConfig
-from lims_etl.database import DatabaseManager
+from lims_etl.scraper import Scraper
+from lims_etl.config import LIMSConfig
+
 
 @pytest.fixture
-def scraper() -> Scraper:
-    """Fixture to create a Scraper instance with a mock driver and config."""
-    with patch.object(DatabaseManager, '__init__', return_value=None), \
-         patch.object(DatabaseManager, 'create_tables', return_value=None):
-        config = LIMSConfig()
-        config.sleep_time = 0 
-        config.selectors = {
-            "GRID_PAGINATION_BASE": "//*[@id='pagination-base']"
-        }
-        
-        s = Scraper(client_id=101, config=config)
-        s.driver = MagicMock(spec=webdriver.Chrome)
-        s.current_page = 1
-        return s
+def config():
+    cfg = LIMSConfig()
+    cfg.sleep_time = 0.1
+    return cfg
 
-def test_has_next_page_success(scraper: Scraper):
-    """Test that has_next_page returns True when the next page element exists."""
-    mock_element = MagicMock()
-    scraper.driver.find_element.return_value = mock_element
+
+@pytest.fixture
+def mock_driver():
+    return MagicMock(spec=webdriver.Chrome)
+
+
+def make_scraper(config, mock_driver):
+    scraper = Scraper(client_id=101, config=config)
+    scraper.driver = mock_driver
     scraper.current_page = 1
-    
-    assert scraper.has_next_page() is True
-    expected_xpath = f'{scraper.config.selectors["GRID_PAGINATION_BASE"]}[{scraper.current_page + 1}]/a'
-    scraper.driver.find_element.assert_called_once_with(By.XPATH, expected_xpath)
-
-def test_has_next_page_failure(scraper: Scraper):
-    """Test that has_next_page returns False when the element is not found."""
-    scraper.current_page = 2
-    scraper.driver.find_element.side_effect = NoSuchElementException("Element not found")
-    assert scraper.has_next_page() is False
-    expected_xpath = f'{scraper.config.selectors["GRID_PAGINATION_BASE"]}[{scraper.current_page + 1}]/a'
-    scraper.driver.find_element.assert_called_once_with(By.XPATH, expected_xpath)
-
-@patch('lims_etl.scraper.sleep')
-def test_go_to_next_page_success(mock_sleep: MagicMock, scraper: Scraper):
-    """Test that go_to_next_page succeeds, increments page, and calls sleep."""
-    scraper.current_page = 1
-    mock_element = MagicMock()
-    scraper.driver.find_element.return_value = mock_element
-    
-    assert scraper.go_to_next_page() is True
-    assert scraper.current_page == 2
-    mock_sleep.assert_called_once_with(scraper.config.sleep_time)
-    mock_element.click.assert_called_once()
-
-    # Verify find_element was called correctly (only once)
-    expected_xpath = f'{scraper.config.selectors["GRID_PAGINATION_BASE"]}[2]/a'
-    scraper.driver.find_element.assert_called_once_with(By.XPATH, expected_xpath)
-
-@patch('lims_etl.scraper.sleep')
-def test_go_to_next_page_failure_no_link(mock_sleep: MagicMock, scraper: Scraper):
-    """Test go_to_next_page fails gracefully if no next-page link exists."""
-    scraper.current_page = 1
-    scraper.driver.find_element.side_effect = NoSuchElementException("Element not found")
-    
-    assert scraper.go_to_next_page() is False
-    assert scraper.current_page == 1
-    
-    # Critical: verify no click attempt and no sleep when element not found
-    scraper.driver.find_element.assert_called_once()
-    mock_sleep.assert_not_called()
-
-@patch('lims_etl.scraper.sleep')
-def test_go_to_next_page_click_fails(mock_sleep: MagicMock, scraper: Scraper):
-    """Test go_to_next_page fails gracefully if the click action fails."""
-    scraper.current_page = 1
-    mock_element = MagicMock()
-    mock_element.click.side_effect = Exception("Element is not clickable")
-    scraper.driver.find_element.return_value = mock_element
-    
-    assert scraper.go_to_next_page() is False
-    # The page should not increment if the click fails and an exception is caught.
-    assert scraper.current_page == 1
-    mock_element.click.assert_called_once()
-    mock_sleep.assert_not_called()
-
-@patch('lims_etl.scraper.sleep')
-def test_navigate_multiple_pages(mock_sleep: MagicMock, scraper: Scraper):
-    """Test that the scraper can navigate multiple pages sequentially."""
-    scraper.current_page = 1
-    page2_element = MagicMock()
-    page3_element = MagicMock()
-    
-    def mock_find_element(by, xpath):
-        if xpath.endswith('[2]/a'):
-            return page2_element
-        elif xpath.endswith('[3]/a'):
-            return page3_element
-        else:
-            raise NoSuchElementException()
-    
-    scraper.driver.find_element.side_effect = mock_find_element
-
-    # Navigate page 1 -> 2
-    assert scraper.go_to_next_page() is True
-    assert scraper.current_page == 2
-    
-    # Navigate page 2 -> 3
-    assert scraper.go_to_next_page() is True
-    assert scraper.current_page == 3
-
-    # Verify each element clicked once
-    page2_element.click.assert_called_once()
-    page3_element.click.assert_called_once()
-    assert mock_sleep.call_count == 2
-    
-    # Check call count for find_element (1 call per navigation)
-    assert scraper.driver.find_element.call_count == 2
-    
-    # Check that it was called with the correct XPaths in sequence
-    expected_xpath_page2 = f'{scraper.config.selectors["GRID_PAGINATION_BASE"]}[2]/a'
-    expected_xpath_page3 = f'{scraper.config.selectors["GRID_PAGINATION_BASE"]}[3]/a'
-    scraper.driver.find_element.assert_has_calls([
-        call(By.XPATH, expected_xpath_page2),
-        call(By.XPATH, expected_xpath_page3)
-    ], any_order=False)
+    scraper.empty_pages_count = 0
+    return scraper
 
 
-def test_pagination_reaches_last_page(scraper: Scraper):
-    """Test pagination stops correctly at the last page."""
-    def mock_find_element(by, xpath):
-        if xpath.endswith('[2]/a') or xpath.endswith('[3]/a'):
+class TestPagination:
+    """Pagination navigation behavior."""
+
+    def test_has_next_page_true_when_link_exists(self, config, mock_driver):
+        scraper = make_scraper(config, mock_driver)
+
+        def find_element(by, selector):
+            if '[2]/a' in selector:
+                return MagicMock()
+            if '[1]/a' in selector:
+                raise NoSuchElementException()
             return MagicMock()
-        else:
-            raise NoSuchElementException("No more pages")
-    
-    scraper.driver.find_element.side_effect = mock_find_element
-    scraper.current_page = 1
-    
-    # Navigate to page 2
-    assert scraper.go_to_next_page() is True
-    assert scraper.current_page == 2
-    
-    # Navigate to page 3 
-    assert scraper.go_to_next_page() is True
-    assert scraper.current_page == 3
-    
-    # Attempt page 4 should fail
-    assert scraper.go_to_next_page() is False
-    assert scraper.current_page == 3  # Should stay on page 3
-    
-    # has_next_page should return False
-    assert scraper.has_next_page() is False
+
+        mock_driver.find_element.side_effect = find_element
+        assert scraper.has_next_page() is True
+
+    def test_has_next_page_false_on_last_page(self, config, mock_driver):
+        scraper = make_scraper(config, mock_driver)
+        mock_driver.find_element.side_effect = NoSuchElementException("No next page")
+        assert scraper.has_next_page() is False
+
+    def test_go_to_next_page_increments_counter_on_success(self, config, mock_driver):
+        scraper = make_scraper(config, mock_driver)
+        scraper.current_page = 1
+
+        def find_element(by, selector):
+            if '[2]/a' in selector:
+                return MagicMock()
+            if '[1]/a' in selector:
+                raise NoSuchElementException()
+            return MagicMock()
+
+        mock_driver.find_element.side_effect = find_element
+
+        with patch('lims_etl.scraper.sleep'):
+            result = scraper.go_to_next_page()
+
+        assert result is True
+        assert scraper.current_page == 2
+
+    def test_go_to_next_page_preserves_counter_on_failure(self, config, mock_driver):
+        scraper = make_scraper(config, mock_driver)
+        scraper.current_page = 1
+        mock_driver.find_element.side_effect = NoSuchElementException()
+
+        result = scraper.go_to_next_page()
+
+        assert result is False
+        assert scraper.current_page == 1
+
+    def test_go_to_next_page_calls_sleep_on_success(self, config, mock_driver):
+        scraper = make_scraper(config, mock_driver)
+
+        def find_element(by, selector):
+            if '[2]/a' in selector:
+                return MagicMock()
+            if '[1]/a' in selector:
+                raise NoSuchElementException()
+            return MagicMock()
+
+        mock_driver.find_element.side_effect = find_element
+
+        with patch('lims_etl.scraper.sleep') as mock_sleep:
+            scraper.go_to_next_page()
+
+        mock_sleep.assert_called_once_with(config.sleep_time)
+
+    def test_go_to_next_page_no_sleep_on_failure(self, config, mock_driver):
+        scraper = make_scraper(config, mock_driver)
+        mock_driver.find_element.side_effect = NoSuchElementException()
+
+        with patch('lims_etl.scraper.sleep') as mock_sleep:
+            scraper.go_to_next_page()
+
+        mock_sleep.assert_not_called()
+
+    def test_sequential_navigation(self, config, mock_driver):
+        scraper = make_scraper(config, mock_driver)
+        page_num = [1]
+        link = MagicMock()
+
+        def find_element(by, selector):
+            current = page_num[0]
+            if f'[{current + 1}]/a' in selector:
+                page_num[0] += 1
+                return link
+            if f'[{current}]/a' in selector:
+                raise NoSuchElementException()
+            return MagicMock()
+
+        mock_driver.find_element.side_effect = find_element
+
+        with patch('lims_etl.scraper.sleep'):
+            assert scraper.go_to_next_page() is True
+            assert scraper.go_to_next_page() is True
+
+        assert scraper.current_page == 3
+
+    def test_stops_at_last_page(self, config, mock_driver):
+        scraper = make_scraper(config, mock_driver)
+        mock_driver.find_element.side_effect = NoSuchElementException()
+
+        assert scraper.has_next_page() is False
+
+        with patch('lims_etl.scraper.sleep'):
+            assert scraper.go_to_next_page() is False
 
 
-def test_stale_element_exception_handling(scraper: Scraper):
-    """Test handling of stale element exceptions."""
-    # Test has_next_page with stale element
-    scraper.driver.find_element.side_effect = StaleElementReferenceException()
-    assert scraper.has_next_page() is False
-    
-    # Test go_to_next_page with stale element during click
-    mock_element = MagicMock()
-    mock_element.click.side_effect = StaleElementReferenceException()
-    scraper.driver.find_element.side_effect = None
-    scraper.driver.find_element.return_value = mock_element
-    scraper.current_page = 1
-    
-    assert scraper.go_to_next_page() is False
-    assert scraper.current_page == 1
+class TestErrorHandling:
+    """Error resilience during pagination."""
+
+    def test_stale_element_on_has_next_page(self, config, mock_driver):
+        scraper = make_scraper(config, mock_driver)
+        mock_driver.find_element.side_effect = StaleElementReferenceException()
+        assert scraper.has_next_page() is False
+
+    def test_stale_element_on_click(self, config, mock_driver):
+        scraper = make_scraper(config, mock_driver)
+        link = MagicMock()
+        link.click.side_effect = StaleElementReferenceException()
+
+        def find_element(by, selector):
+            if '[2]/a' in selector:
+                return link
+            if '[1]/a' in selector:
+                raise NoSuchElementException()
+            return MagicMock()
+
+        mock_driver.find_element.side_effect = find_element
+        assert scraper.go_to_next_page() is False
+        assert scraper.current_page == 1
+
+    def test_click_intercepted(self, config, mock_driver):
+        scraper = make_scraper(config, mock_driver)
+        link = MagicMock()
+        link.click.side_effect = ElementClickInterceptedException()
+
+        def find_element(by, selector):
+            if '[2]/a' in selector:
+                return link
+            if '[1]/a' in selector:
+                raise NoSuchElementException()
+            return MagicMock()
+
+        mock_driver.find_element.side_effect = find_element
+        assert scraper.go_to_next_page() is False
+        assert scraper.current_page == 1
 
 
-@patch('lims_etl.scraper.sleep')
-def test_element_click_intercepted(mock_sleep: MagicMock, scraper: Scraper):
-    """Test handling of click interception."""
-    mock_element = MagicMock()
-    mock_element.click.side_effect = ElementClickInterceptedException()
-    scraper.driver.find_element.return_value = mock_element
-    scraper.current_page = 1
-    
-    assert scraper.go_to_next_page() is False
-    assert scraper.current_page == 1
-    mock_element.click.assert_called_once()
-    mock_sleep.assert_not_called()
+class TestDateParsing:
+    """Date parsing from grid cells."""
 
+    def test_valid_date_format(self, config, mock_driver):
+        scraper = make_scraper(config, mock_driver)
+        mock_driver.find_element.return_value.text = "20/03/2023 01:18:00 PM"
 
-def test_double_find_element_call_detection(scraper: Scraper):
-    """Test that scraper only calls find_element once per operation."""
-    mock_element = MagicMock()
-    scraper.driver.find_element.return_value = mock_element
-    
-    # Test has_next_page calls find_element exactly once
-    scraper.has_next_page()
-    assert scraper.driver.find_element.call_count == 1
-    
-    # Reset and test go_to_next_page
-    scraper.driver.reset_mock()
-    scraper.go_to_next_page()
-    assert scraper.driver.find_element.call_count == 1
+        result = scraper.parse_date(2, '_lblFechaRecep')
+
+        assert result.year == 2023
+        assert result.month == 3
+        assert result.day == 20
+
+    def test_empty_text_returns_nat(self, config, mock_driver):
+        scraper = make_scraper(config, mock_driver)
+        mock_driver.find_element.return_value.text = ""
+
+        result = scraper.parse_date(2, '_lblFechaRecep')
+
+        import pandas as pd
+        assert pd.isna(result)
+
+    def test_invalid_format_returns_nat(self, config, mock_driver):
+        scraper = make_scraper(config, mock_driver)
+        mock_driver.find_element.return_value.text = "Not a date"
+
+        result = scraper.parse_date(2, '_lblFechaRecep')
+
+        import pandas as pd
+        assert pd.isna(result)
+
+    def test_birth_date_short_format(self, config, mock_driver):
+        scraper = make_scraper(config, mock_driver)
+        mock_driver.find_element.return_value.text = "21/11/1979"
+
+        result = scraper.parse_birth_date(2)
+
+        assert result.year == 1979
+        assert result.month == 11
+        assert result.day == 21

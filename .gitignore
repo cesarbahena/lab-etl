@@ -23,6 +23,7 @@ __pycache__/
 # Testing
 *.db
 test-*.sh
+!tests/
 
 # Generated mock pages
 consulta_page_*.html
