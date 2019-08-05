@@ -1,0 +1,31 @@
+FROM apache/airflow:2.8.2-python3.12
+
+# Install system dependencies
+USER root
+RUN apt-get update && apt-get install -y \
+    gcc \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies for ETL
+COPY pyproject.toml*.txt* ./
+RUN pip install --no-cache-dir "apache-airflow==2.8.2" \
+    psycopg2-binary \
+    selenium \
+    webdriver-manager \
+    pandas \
+    python-dotenv \
+    requests \
+    beautifulsoup4
+
+# Install pytest
+RUN pip install --no-cache-dir pytest pytest-cov pytest-mock
+
+# Switch back to airflow user
+USER airflow
+
+# Default arguments for Airflow
+CMD ["bash"]
+
+# Add local src to PYTHONPATH so imports work
+ENV PYTHONPATH=/opt/airflow/src:$PYTHONPATH

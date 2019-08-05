@@ -1,0 +1,137 @@
+# Airflow + Lab-ETL + Lab-Hub Stack
+# PostgreSQL is shared between all services
+
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: Dockerfile.airflow
+  environment:
+    &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql://quimios_dev:dev_password@postgres:5432/quimios_dev
+    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__API__AUTH_MANAGER: airflow.auth.managers.simple.simple_auth_manager.SimpleAuthManager
+    AIRFLOW__AUTH_MANAGER__SIMPLE__ADMIN_USER: admin
+    AIRFLOW__AUTH_MANAGER__SIMPLE__ADMIN_PASSWORD: admin
+    AIRFLOW__CORE__DEFAULT_TIMEZONE: America/Mexico_City
+    # Shared with lab-etl
+    AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+    AIRFLOW__CORE__HOSTNAME_CALLABLE: airflow.utils.net.getfqdn
+    # Environment for ETL
+    AIRFLOW_VAR_HUB_API_URL: http://app:8080
+    AIRFLOW_VAR_DB_HOST: postgres
+    AIRFLOW_VAR_DB_PORT: 5432
+    AIRFLOW_VAR_DB_USER: quimios_dev
+    AIRFLOW_VAR_DB_PASSWORD: dev_password
+    AIRFLOW_VAR_DB_NAME: quimios_dev
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - ./config/airflow.cfg:/opt/airflow/airflow.cfg
+    - ./src:/opt/airflow/src
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: quimios-dev-db
+    environment:
+      POSTGRES_USER: Quimios_dev
+      POSTGRES_PASSWORD: dev_password
+      POSTGRES_DB: quimios_dev
+    ports:
+      - "5433:5432"
+    volumes:
+      - quimios_dev_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U Quimios_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: ../lab-hub
+      dockerfile: ../lab-hub/Dockerfile
+    container_name: quimios-dev-app
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=quimios_dev;Username=Quimios_dev;Password=dev_password"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  airflow-webserver:
+    <<: *airflow-common
+    container_name: quimios-airflow-webserver
+    command: webserver
+    ports:
+      - "8090:8090"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: quimios-airflow-scheduler
+    command: scheduler
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname \"${HOSTNAME}\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-triggerer:
+    <<: *airflow-common
+    container_name: quimios-airflow-triggerer
+    command: triggerer
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type TriggererJob --hostname \"${HOSTNAME}\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-init:
+    image: ${AIRFLOW_IMAGE_NAME:-apache/airflow}:2.8.2
+    container_name: quimios-airflow-init
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+    command: version
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  quimios_dev_data:
+    external: false
