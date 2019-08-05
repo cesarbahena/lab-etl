@@ -88,9 +88,11 @@ class QuimiOSHubClient:
 
     def sync_samples(self, samples: List[Dict]) -> int:
         """Sync samples - returns count synced (legacy compatibility)."""
+        from datetime import date
         if not samples:
             return 0
-        result = self.sync_samples_idempotent(samples, partition_date='current')
+        today = date.today().isoformat()
+        result = self.sync_samples_idempotent(samples, partition_date=today)
         return result['inserted']
 
     def sync_samples_idempotent(self, samples: List[Dict], partition_date: str) -> dict:
