@@ -1,0 +1,18 @@
+# Build outputs
+bin/
+obj/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local development
+appsettings.Development.json
