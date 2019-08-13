@@ -1,7 +1,10 @@
 @page "/Login"
+@using Microsoft.AspNetCore.Antiforgery
+@inject IAntiforgery Antiforgery
 @model QuimiOSWebForms.Pages.LoginModel
 @{
     Layout = null;
+    var token = Antiforgery.GetAndStoreTokens(HttpContext);
 }
 
 <!DOCTYPE html>
@@ -26,27 +29,28 @@
     <div class="login-box">
         <h1>QuimiOS LIMS</h1>
         
-        <form method="post" action="/Login">
-            <input type="hidden" name="__VIEWSTATE" value="@Model.ViewState">
-            <input type="hidden" name="__VIEWSTATEGENERATOR" value="@Model.ViewStateGenerator">
-            <input type="hidden" name="__EVENTVALIDATION" value="@Model.EventValidation">
-            
-            @if (!string.IsNullOrEmpty(Model.ErrorMessage))
-            {
-                <div class="error">@Model.ErrorMessage</div>
-            }
+        @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+        {
+            <div class="error">@Model.ErrorMessage</div>
+        }
+        
+        <form id="aspnetForm" method="post">
+            <input name="@token.FormFieldName" type="hidden" value="@token.RequestToken"/>
+            <input type="hidden" name="__VIEWSTATE" id="__VIEWSTATE" value="@Model.ViewState">
+            <input type="hidden" name="__VIEWSTATEGENERATOR" id="__VIEWSTATEGENERATOR" value="@Model.ViewStateGenerator">
+            <input type="hidden" name="__EVENTVALIDATION" id="__EVENTVALIDATION" value="@Model.EventValidation">
             
             <div class="form-group">
-                <label for="txtUsername">Usuario:</label>
-                <input type="text" id="txtUsername" name="txtUsername" required>
+                <label for="Login1_UserName">Usuario:</label>
+                <input type="text" id="Login1_UserName" name="Login1_UserName" required>
             </div>
             
             <div class="form-group">
-                <label for="txtPassword">Contraseña:</label>
-                <input type="password" id="txtPassword" name="txtPassword" required>
+                <label for="Login1_Password">Contraseña:</label>
+                <input type="password" id="Login1_Password" name="Login1_Password" required>
             </div>
             
-            <button type="submit" name="btnLogin" value="Aceptar">Aceptar</button>
+            <button type="submit" id="Login1_LoginButton" name="Login1_LoginButton" value="Aceptar">Aceptar</button>
             
             <div class="info">
                 Demo: demo_user / demo_pass

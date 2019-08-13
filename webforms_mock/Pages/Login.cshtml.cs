@@ -8,18 +8,21 @@ namespace QuimiOSWebForms.Pages;
 public class LoginModel : PageModel
 {
     [BindProperty]
-    public string? Username { get; set; }
+    public string? Login1_UserName { get; set; }
     
     [BindProperty]
-    public string? Password { get; set; }
+    public string? Login1_Password { get; set; }
+    
+    [BindProperty]
+    public string? Login1_LoginButton { get; set; }
     
     public string ViewState { get; set; } = "";
     public string ViewStateGenerator { get; set; } = "";
     public string EventValidation { get; set; } = "";
     public string? ErrorMessage { get; set; }
     
-    private static readonly string VALID_USER = "demo_user";
-    private static readonly string VALID_PASS = "demo_pass";
+    private const string VALID_USER = "demo_user";
+    private const string VALID_PASS = "demo_pass";
     
     public void OnGet()
     {
@@ -30,12 +33,12 @@ public class LoginModel : PageModel
     {
         GenerateViewState();
         
-        if (Username == VALID_USER && Password == VALID_PASS)
+        if (Login1_UserName == VALID_USER && Login1_Password == VALID_PASS)
         {
-            // Store auth in session
             HttpContext.Session.SetString("Authenticated", "true");
-            HttpContext.Session.SetString("User", Username ?? "");
+            HttpContext.Session.SetString("User", Login1_UserName ?? "");
             HttpContext.Session.SetInt32("ClientId", 101);
+            HttpContext.Session.SetString("SessionToken", GenerateSessionToken());
             
             return RedirectToPage("/Consulta");
         }
@@ -46,24 +49,21 @@ public class LoginModel : PageModel
     
     private void GenerateViewState()
     {
-        // Generate encrypted-like state (simplified for mock)
         var timestamp = DateTime.UtcNow.Ticks.ToString();
-        
-        // Create a base64 encoded state that looks like ASP.NET
-        var stateData = $"Page=Login|Timestamp={timestamp}";
+        var stateData = $"Page=Login|Timestamp={timestamp}|Session={HttpContext.Session.Id}";
         ViewState = Convert.ToBase64String(Encoding.UTF8.GetBytes(stateData));
         
-        // ViewStateGenerator (shorter, like ASP.NET)
-        var vsgData = $"Generator={(timestamp.GetHashCode() % 10000)}";
+        var vsgData = $"Generator={timestamp.GetHashCode() % 10000}";
         ViewStateGenerator = Convert.ToBase64String(Encoding.UTF8.GetBytes(vsgData))[..20];
         
-        // EventValidation (random token)
-        var validationData = new byte[32];
-        RandomNumberGenerator.Fill(validationData);
-        EventValidation = Convert.ToBase64String(validationData);
-        
-        // Store in session for validation
-        HttpContext.Session.SetString("ViewState", ViewState);
-        HttpContext.Session.SetString("EventValidation", EventValidation);
+        // EventValidation for allowed events on this page
+        var allowedEvents = $"/Login:btnLogin|{timestamp}";
+        EventValidation = Convert.ToBase64String(Encoding.UTF8.GetBytes(allowedEvents));
+    }
+    
+    private string GenerateSessionToken()
+    {
+        var tokenData = $"{HttpContext.Session.Id}|{DateTime.UtcNow.Ticks}";
+        return Convert.ToBase64String(Encoding.UTF8.GetBytes(tokenData));
     }
 }

@@ -1,101 +1,110 @@
 @page "/Consulta"
+@using Microsoft.AspNetCore.Antiforgery
+@inject IAntiforgery Antiforgery
 @model QuimiOSWebForms.Pages.ConsultaModel
 @{
-    Layout = null;
+    Layout = "_Layout";
+    var token = Antiforgery.GetAndStoreTokens(HttpContext);
+    var currentPage = Model.CurrentPage;
+    var totalPages = Model.TotalPages;
 }
 
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Consulta Orden de Trabajo</title>
-    <meta charset="utf-8">
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
-        .header { background: #2c3e50; color: white; padding: 15px; border-radius: 4px; margin-bottom: 20px; display: flex; justify-content: space-between; }
-        .search-box { background: white; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
-        input[type="text"] { padding: 8px; border: 1px solid #ddd; border-radius: 4px; width: 200px; }
-        button { padding: 8px 15px; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        table { width: 100%; border-collapse: collapse; background: white; border-radius: 4px; overflow: hidden; }
-        th { background: #34495e; color: white; padding: 12px; text-align: left; }
-        td { padding: 10px; border-bottom: 1px solid #eee; }
-        tr:hover { background: #f8f9fa; }
-        .pagination { margin-top: 20px; text-align: center; }
-        .pagination a, .pagination span { padding: 8px 12px; margin: 0 3px; display: inline-block; }
-        .pagination a { background: #3498db; color: white; text-decoration: none; border-radius: 4px; }
-        .pagination a:hover { background: #2980b9; }
-        .pagination .current { background: #2c3e50; color: white; border-radius: 4px; }
-    </style>
+    <title>Consulta Ordenes de Trabajo</title>
 </head>
 <body>
-    <div class="header">
-        <h2>Consulta Orden de Trabajo - Cliente @Model.ClientId</h2>
-        <span>Usuario: @Model.ClientId</span>
-    </div>
-    
-    <div class="search-box">
-        <form method="post" action="/Consulta">
-            <input type="hidden" name="__VIEWSTATE" value="@Model.ViewState">
-            <input type="hidden" name="__VIEWSTATEGENERATOR" value="@Model.ViewStateGenerator">
-            <input type="hidden" name="__EVENTVALIDATION" value="@Model.EventValidation">
+    <form id="aspnetForm" method="post">
+        <input name="@token.FormFieldName" type="hidden" value="@token.RequestToken"/>
+        <input type="hidden" name="__VIEWSTATE" id="__VIEWSTATE" value="@Model.ViewState">
+        <input type="hidden" name="__VIEWSTATEGENERATOR" id="__VIEWSTATEGENERATOR" value="@Model.ViewStateGenerator">
+        <input type="hidden" name="__EVENTVALIDATION" id="__EVENTVALIDATION" value="@Model.EventValidation">
+        
+        <div style="margin: 20px;">
+            <div style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 4px;">
+                <h3>Busqueda de Ordenes de Trabajo</h3>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <label for="txtCliente">Cliente:</label>
+                    <input type="text" id="ctl00_ContentMasterPage_txtcliente" name="ctl00_ContentMasterPage_txtcliente" value="@Model.ClientId" style="padding: 8px; width: 100px;">
+                    <input type="submit" id="ctl00_ContentMasterPage_btnBuscar" name="ctl00_ContentMasterPage_btnBuscar" value="Buscar" style="padding: 8px 16px;">
+                    <span style="margin-left: 20px;">Usuario: <span id="ctl00_ContentMasterPage_lblUsuarioCaptura">@Model.LoggedInUser</span></span>
+                </div>
+            </div>
             
-            <label for="txtCliente">Cliente:</label>
-            <input type="text" id="txtCliente" name="txtCliente" value="@Model.ClientId">
-            <button type="submit" name="btnBuscar">Buscar</button>
-        </form>
-    </div>
-    
-    <table>
-        <thead>
-            <tr>
-                <th>Fecha</th>
-                <th>Recep</th>
-                <th>Folio</th>
-                <th>Cliente</th>
-                <th>Paciente</th>
-                <th>Est/Per</th>
-                <th>Test</th>
-                <th>FecCapRes</th>
-                <th>FecLibera</th>
-                <th>SucProc</th>
-                <th>Maquilador</th>
-                <th>Priority</th>
-                <th>FecNac</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var row in Model.Records)
-            {
-                <tr>
-                    <td><span id="grd_ctl@(row.RowNum)_lblFechaGrd">@row.Fecha</span></td>
-                    <td><span id="grd_ctl@(row.RowNum)_lblFechaRecep">@row.Recep</span></td>
-                    <td><span id="grd_ctl@(row.RowNum)_lblFolioGrd">@row.Folio</span></td>
-                    <td><span id="grd_ctl@(row.RowNum)_lblClienteGrd">@row.Cliente</span></td>
-                    <td><span id="grd_ctl@(row.RowNum)_lblPacienteGrd">@row.Paciente</span></td>
-                    <td><span id="grd_ctl@(row.RowNum)_lblEstPerGrd">@row.EstPer</span></td>
-                    <td><span id="grd_ctl@(row.RowNum)_Label1">@row.Test</span></td>
-                    <td><span id="grd_ctl@(row.RowNum)_lblFecCapRes">@row.FecCapRes</span></td>
-                    <td><span id="grd_ctl@(row.RowNum)_lblFecLibera">@row.FecLibera</span></td>
-                    <td><span id="grd_ctl@(row.RowNum)_lblSucProc">@row.SucProc</span></td>
-                    <td><span id="grd_ctl@(row.RowNum)_lblMaquilador">@row.Maquilador</span></td>
-                    <td><span id="grd_ctl@(row.RowNum)_Label3">@row.Priority</span></td>
-                    <td><span id="grd_ctl@(row.RowNum)_lblFecNac">@row.FecNac</span></td>
-                </tr>
-            }
-        </tbody>
-    </table>
-    
-    <div class="pagination">
-        @for (int i = 1; i <= Model.TotalPages; i++)
-        {
-            if (i == Model.CurrentPage)
-            {
-                <span class="current">@i</span>
-            }
-            else
-            {
-                <a href="/Consulta?PageNum=@i">@i</a>
-            }
-        }
-    </div>
+            <table id="ctl00_ContentMasterPage_grdConsultaOT" style="width: 100%; border-collapse: collapse; background: white;">
+                <thead>
+                    <tr style="background: #e9ecef;">
+                        <th style="padding: 10px; border: 1px solid #dee2e6;">Fecha</th>
+                        <th style="padding: 10px; border: 1px solid #dee2e6;">Recep</th>
+                        <th style="padding: 10px; border: 1px solid #dee2e6;">Folio</th>
+                        <th style="padding: 10px; border: 1px solid #dee2e6;">Cliente</th>
+                        <th style="padding: 10px; border: 1px solid #dee2e6;">Paciente</th>
+                        <th style="padding: 10px; border: 1px solid #dee2e6;">Est/Per</th>
+                        <th style="padding: 10px; border: 1px solid #dee2e6;">Prueba</th>
+                        <th style="padding: 10px; border: 1px solid #dee2e6;">FecCapRes</th>
+                        <th style="padding: 10px; border: 1px solid #dee2e6;">FecLibera</th>
+                        <th style="padding: 10px; border: 1px solid #dee2e6;">SucProc</th>
+                        <th style="padding: 10px; border: 1px solid #dee2e6;">Maquilador</th>
+                        <th style="padding: 10px; border: 1px solid #dee2e6;">Prioridad</th>
+                        <th style="padding: 10px; border: 1px solid #dee2e6;">FecNac</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @for (int i = 0; i < Model.Records.Count; i++)
+                    {
+                        var record = Model.Records[i];
+                        var rowIndex = (i + 2).ToString("D2");
+                        <tr>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;">
+                                <span id="ctl00_ContentMasterPage_grdConsultaOT_ctl@(rowIndex)_lblFechaGrd">@record.Fecha</span>
+                            </td>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;">
+                                <span id="ctl00_ContentMasterPage_grdConsultaOT_ctl@(rowIndex)_lblFechaRecep">@record.FechaRecep</span>
+                            </td>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;">
+                                <span id="ctl00_ContentMasterPage_grdConsultaOT_ctl@(rowIndex)_lblFolioGrd">@record.Folio</span>
+                            </td>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;">
+                                <span id="ctl00_ContentMasterPage_grdConsultaOT_ctl@(rowIndex)_lblClienteGrd">@record.Cliente</span>
+                            </td>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;">
+                                <span id="ctl00_ContentMasterPage_grdConsultaOT_ctl@(rowIndex)_lblPacienteGrd">@record.Paciente</span>
+                            </td>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;">
+                                <span id="ctl00_ContentMasterPage_grdConsultaOT_ctl@(rowIndex)_lblEstPerGrd">@record.EstPer</span>
+                            </td>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;">
+                                <span id="ctl00_ContentMasterPage_grdConsultaOT_ctl@(rowIndex)_Label1">@record.Prueba</span>
+                            </td>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;">
+                                <span id="ctl00_ContentMasterPage_grdConsultaOT_ctl@(rowIndex)_lblFecCapRes">@record.FecCapRes</span>
+                            </td>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;">
+                                <span id="ctl00_ContentMasterPage_grdConsultaOT_ctl@(rowIndex)_lblFecLibera">@record.FecLibera</span>
+                            </td>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;">
+                                <span id="ctl00_ContentMasterPage_grdConsultaOT_ctl@(rowIndex)_lblSucProc">@record.SucProc</span>
+                            </td>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;">
+                                <span id="ctl00_ContentMasterPage_grdConsultaOT_ctl@(rowIndex)_lblMaquilador">@record.Maquilador</span>
+                            </td>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;">
+                                <span id="ctl00_ContentMasterPage_grdConsultaOT_ctl@(rowIndex)_Label3">@record.Prioridad</span>
+                            </td>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;">
+                                <span id="ctl00_ContentMasterPage_grdConsultaOT_ctl@(rowIndex)_lblFecNac">@record.FecNac</span>
+                            </td>
+                        </tr>
+                    }
+                    <tr style="background: #f8f9fa;">
+                        <td colspan="13" style="padding: 10px; text-align: center;">
+                            Pagina @currentPage de @totalPages
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </form>
 </body>
 </html>

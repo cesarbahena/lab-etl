@@ -5,131 +5,131 @@ using System.Text;
 
 namespace QuimiOSWebForms.Pages;
 
+public class WorkOrderRecord
+{
+    public string Fecha { get; set; } = "";
+    public string FechaRecep { get; set; } = "";
+    public int Folio { get; set; }
+    public int Cliente { get; set; }
+    public int Paciente { get; set; }
+    public int EstPer { get; set; }
+    public string Prueba { get; set; } = "";
+    public string FecCapRes { get; set; } = "";
+    public string FecLibera { get; set; } = "";
+    public string SucProc { get; set; } = "";
+    public string Maquilador { get; set; } = "";
+    public string Prioridad { get; set; } = "";
+    public string FecNac { get; set; } = "";
+}
+
 public class ConsultaModel : PageModel
 {
-    [BindProperty(SupportsGet = true)]
-    public int ClientId { get; set; } = 101;
+    private const int PageSize = 10;
+    private const int TotalRecords = 100;
+    private static readonly string[] Pruebas = { "Glucose", "CBC", "Lipid Panel", "Chemistry Panel", "Blood Test", "Hemogram" };
+    private static readonly string[] Sucursales = { "Lab East", "Lab North", "Branch A", "Branch B", "Branch C" };
+    private static readonly string[] Maquiladores = { "Quest Labs", "LabCorp", "Maq X", "Maq Y" };
+    private static readonly string[] Prioridades = { "Stat", "Routine", "Normal" };
     
-    [BindProperty(SupportsGet = true)]
-    public int PageNum { get; set; } = 1;
-    
-    [BindProperty]
-    public string? TxtCliente { get; set; }
-    
-    public List<SampleRecord> Records { get; set; } = new();
-    public int TotalPages { get; set; } = 3;
     public int CurrentPage { get; set; } = 1;
+    public int TotalPages { get; set; } = 10;
+    public List<WorkOrderRecord> Records { get; set; } = new();
+    public string LoggedInUser { get; set; } = "";
+    public int ClientId { get; set; } = 101;
     
     public string ViewState { get; set; } = "";
     public string ViewStateGenerator { get; set; } = "";
     public string EventValidation { get; set; } = "";
     
-    // Sample data
-    private static readonly List<SampleRecord> AllRecords = new()
+    public IActionResult OnGet()
     {
-        new() { Fecha = "20/03/2023 12:00:00 AM", Recep = "20/03/2023 01:18:00 AM", Folio = "100002", Cliente = "105", Paciente = "387", EstPer = "168", Test = "Glucose", FecCapRes = "20/03/2023 09:18:00 AM", FecLibera = "20/03/2023 02:18:00 PM", SucProc = "Branch C", Maquilador = "LabCorp", Priority = "Stat", FecNac = "21/11/1979" },
-        new() { Fecha = "19/03/2023 09:00:00 PM", Recep = "19/03/2023 09:32:00 PM", Folio = "100003", Cliente = "104", Paciente = "831", EstPer = "435", Test = "CBC", FecCapRes = "20/03/2023 01:32:00 AM", FecLibera = "21/03/2023 01:32:00 AM", SucProc = "Lab East", Maquilador = "Quest Labs", Priority = "Stat", FecNac = "10/06/1984" },
-        new() { Fecha = "19/03/2023 06:00:00 PM", Recep = "19/03/2023 07:18:00 PM", Folio = "100004", Cliente = "104", Paciente = "997", EstPer = "706", Test = "Lipid Panel", FecCapRes = "20/03/2023 01:18:00 AM", FecLibera = "20/03/2023 11:18:00 PM", SucProc = "Lab East", Maquilador = "Quest Labs", Priority = "Routine", FecNac = "11/07/1954" },
-        new() { Fecha = "19/03/2023 01:00:00 PM", Recep = "19/03/2023 01:37:00 PM", Folio = "100005", Cliente = "104", Paciente = "417", EstPer = "901", Test = "Chemistry Panel", FecCapRes = "19/03/2023 05:37:00 PM", FecLibera = "20/03/2023 12:37:00 AM", SucProc = "Lab North", Maquilador = "Maq X", Priority = "Stat", FecNac = "10/10/1978" },
-        new() { Fecha = "19/03/2023 11:00:00 AM", Recep = "19/03/2023 12:27:00 PM", Folio = "100006", Cliente = "103", Paciente = "347", EstPer = "673", Test = "Blood Test", FecCapRes = "19/03/2023 04:27:00 PM", FecLibera = "20/03/2023 01:27:00 AM", SucProc = "Branch C", Maquilador = "Quest Labs", Priority = "Normal", FecNac = "04/03/1971" },
-        new() { Fecha = "19/03/2023 08:00:00 AM", Recep = "19/03/2023 08:48:00 AM", Folio = "100007", Cliente = "101", Paciente = "416", EstPer = "224", Test = "Glucose", FecCapRes = "19/03/2023 10:48:00 AM", FecLibera = "20/03/2023 09:48:00 AM", SucProc = "Lab East", Maquilador = "Quest Labs", Priority = "Normal", FecNac = "27/06/1991" },
-        new() { Fecha = "19/03/2023 05:00:00 AM", Recep = "19/03/2023 05:41:00 AM", Folio = "100008", Cliente = "105", Paciente = "459", EstPer = "551", Test = "Blood Test", FecCapRes = "19/03/2023 09:41:00 AM", FecLibera = "19/03/2023 01:41:00 PM", SucProc = "Branch B", Maquilador = "Maq X", Priority = "Stat", FecNac = "12/02/1990" },
-        new() { Fecha = "19/03/2023 01:00:00 AM", Recep = "19/03/2023 01:34:00 AM", Folio = "100009", Cliente = "104", Paciente = "356", EstPer = "645", Test = "Hemogram", FecCapRes = "19/03/2023 05:34:00 AM", FecLibera = "20/03/2023 04:34:00 AM", SucProc = "Lab North", Maquilador = "Maq Y", Priority = "Routine", FecNac = "01/03/1970" },
-        new() { Fecha = "19/03/2023 12:00:00 AM", Recep = "19/03/2023 12:58:00 AM", Folio = "100010", Cliente = "105", Paciente = "773", EstPer = "184", Test = "Chemistry Panel", FecCapRes = "19/03/2023 04:58:00 AM", FecLibera = "19/03/2023 10:58:00 AM", SucProc = "Lab East", Maquilador = "Maq Y", Priority = "Routine", FecNac = "25/07/1998" },
-        new() { Fecha = "18/03/2023 09:00:00 PM", Recep = "18/03/2023 09:47:00 PM", Folio = "100011", Cliente = "102", Paciente = "879", EstPer = "166", Test = "Lipid Panel", FecCapRes = "19/03/2023 03:47:00 AM", FecLibera = "19/03/2023 06:47:00 PM", SucProc = "Branch A", Maquilador = "Quest Labs", Priority = "Stat", FecNac = "09/09/1980" },
-    };
-    
-    public void OnGet()
-    {
-        // Check auth
-        var auth = HttpContext.Session.GetString("Authenticated");
-        if (auth != "true")
-        {
-            Response.Redirect("/Login");
-            return;
-        }
-        
-        // Update client from query or session
-        ClientId = HttpContext.Session.GetInt32("ClientId") ?? 101;
-        CurrentPage = PageNum > 0 ? PageNum : 1;
-        
-        LoadRecords();
-        GenerateViewState();
-    }
-    
-    public IActionResult OnPost()
-    {
-        var auth = HttpContext.Session.GetString("Authenticated");
-        if (auth != "true")
-        {
+        if (!IsAuthenticated())
             return RedirectToPage("/Login");
-        }
         
-        // Handle client search
-        if (!string.IsNullOrEmpty(TxtCliente) && int.TryParse(TxtCliente, out int newClient))
-        {
-            ClientId = newClient;
-            HttpContext.Session.SetInt32("ClientId", ClientId);
-            CurrentPage = 1;
-        }
+        LoggedInUser = HttpContext.Session.GetString("User") ?? "101";
+        ClientId = HttpContext.Session.GetInt32("ClientId") ?? 101;
         
-        LoadRecords();
+        if (int.TryParse(Request.Query["page"], out var page))
+            CurrentPage = Math.Max(1, Math.Min(page, TotalPages));
+        
         GenerateViewState();
+        GenerateRecords();
         
         return Page();
     }
     
-    private void LoadRecords()
+    public IActionResult OnPost()
     {
-        int rowsPerPage = 10;
-        int startIdx = (CurrentPage - 1) * rowsPerPage;
+        if (!IsAuthenticated())
+            return RedirectToPage("/Login");
         
-        var filtered = AllRecords.Where(r => r.Cliente == ClientId.ToString()).ToList();
-        if (!filtered.Any())
-            filtered = AllRecords; // Show all if no match
+        LoggedInUser = HttpContext.Session.GetString("User") ?? "101";
+        ClientId = HttpContext.Session.GetInt32("ClientId") ?? 101;
         
-        var paged = filtered.Skip(startIdx).Take(rowsPerPage).ToList();
-        
-        // Add row numbers
-        for (int i = 0; i < paged.Count; i++)
+        // Handle search button
+        if (Request.Form.ContainsKey("ctl00_ContentMasterPage_btnBuscar"))
         {
-            paged[i].RowNum = startIdx + i + 2; // +2 because grid starts at row 2
+            if (int.TryParse(Request.Form["ctl00_ContentMasterPage_txtcliente"], out var client))
+                ClientId = client;
+            CurrentPage = 1;
         }
         
-        Records = paged;
-        TotalPages = (int)Math.Ceiling((double)filtered.Count / rowsPerPage);
-        if (TotalPages < 1) TotalPages = 1;
+        GenerateViewState();
+        GenerateRecords();
+        
+        return Page();
+    }
+    
+    private bool IsAuthenticated()
+    {
+        return HttpContext.Session.GetString("Authenticated") == "true";
     }
     
     private void GenerateViewState()
     {
         var timestamp = DateTime.UtcNow.Ticks.ToString();
-        var stateData = $"Page=Consulta|Client={ClientId}|PageNum={CurrentPage}|Timestamp={timestamp}";
+        var stateData = $"Page=Consulta|CurrentPage={CurrentPage}|ClientId={ClientId}|Timestamp={timestamp}";
         ViewState = Convert.ToBase64String(Encoding.UTF8.GetBytes(stateData));
         
-        var vsgData = $"Generator={(timestamp.GetHashCode() % 10000)}";
+        var vsgData = $"Generator={timestamp.GetHashCode() % 10000}";
         ViewStateGenerator = Convert.ToBase64String(Encoding.UTF8.GetBytes(vsgData))[..20];
         
-        var validationData = new byte[32];
-        RandomNumberGenerator.Fill(validationData);
-        EventValidation = Convert.ToBase64String(validationData);
+        // EventValidation for pagination and search
+        var allowedEvents = $"/Consulta:btnBuscar|/Consulta:lnkNext|/Consulta:lnkPrev|Page={CurrentPage}";
+        EventValidation = Convert.ToBase64String(Encoding.UTF8.GetBytes(allowedEvents));
     }
-}
-
-public class SampleRecord
-{
-    public int RowNum { get; set; }
-    public string Fecha { get; set; } = "";
-    public string Recep { get; set; } = "";
-    public string Folio { get; set; } = "";
-    public string Cliente { get; set; } = "";
-    public string Paciente { get; set; } = "";
-    public string EstPer { get; set; } = "";
-    public string Test { get; set; } = "";
-    public string FecCapRes { get; set; } = "";
-    public string FecLibera { get; set; } = "";
-    public string SucProc { get; set; } = "";
-    public string Maquilador { get; set; } = "";
-    public string Priority { get; set; } = "";
-    public string FecNac { get; set; } = "";
+    
+    private void GenerateRecords()
+    {
+        var random = new Random(CurrentPage * 1000 + ClientId);
+        var startIndex = (CurrentPage - 1) * PageSize;
+        var baseDate = new DateTime(2023, 03, 20);
+        
+        for (int i = 0; i < PageSize; i++)
+        {
+            var recordIndex = startIndex + i;
+            var fecha = baseDate.AddHours(-recordIndex * 3);
+            var fechaRecep = fecha.AddMinutes(random.Next(30, 90));
+            var fecCapRes = fechaRecep.AddHours(random.Next(2, 8));
+            var fecLibera = fecCapRes.AddHours(random.Next(4, 12));
+            
+            Records.Add(new WorkOrderRecord
+            {
+                Fecha = fecha.ToString("dd/MM/yyyy hh:mm:ss tt"),
+                FechaRecep = fechaRecep.ToString("dd/MM/yyyy hh:mm:ss tt"),
+                Folio = 100002 + recordIndex,
+                Cliente = 101 + random.Next(0, 5),
+                Paciente = 300 + random.Next(100, 900),
+                EstPer = 100 + random.Next(100, 900),
+                Prueba = Pruebas[random.Next(Pruebas.Length)],
+                FecCapRes = fecCapRes.ToString("dd/MM/yyyy hh:mm:ss tt"),
+                FecLibera = fecLibera.ToString("dd/MM/yyyy hh:mm:ss tt"),
+                SucProc = Sucursales[random.Next(Sucursales.Length)],
+                Maquilador = Maquiladores[random.Next(Maquiladores.Length)],
+                Prioridad = Prioridades[random.Next(Prioridades.Length)],
+                FecNac = new DateTime(1970 + random.Next(0, 35), random.Next(1, 13), random.Next(1, 29))
+                    .ToString("dd/MM/yyyy")
+            });
+        }
+    }
 }
