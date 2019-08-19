@@ -178,7 +178,7 @@ def lims_etl_backfill_dag():
         Process a single date partition.
         
         This task is idempotent - safe to re-run for same date.
-        Uses DELETE + INSERT pattern for safe updates.
+        Uses HTTP scraper for better performance.
         
         Args:
             date: Partition date (YYYY-MM-DD)
@@ -198,62 +198,69 @@ def lims_etl_backfill_dag():
         
         # Import ETL components
         from lims_etl.config import LIMSConfig
-        from lims_etl.scraper import Scraper, prepare_sample_data
+        from lims_etl.http_scraper import HTTPScraper
         from lims_etl.api_client import QuimiOSHubClient
         
         # Configure execution
         config = LIMSConfig()
-        exec_dt = datetime.strptime(date, '%Y-%m-%d')
-        config.start_date = exec_dt
         
-        # Override clients if provided
-        if clients:
-            config.test_clients = [int(c.strip()) for c in clients.split(',')]
+        # Create HTTP scraper
+        scraper = HTTPScraper(
+            base_url=LIMSConfig.LIMS_URL,
+            username=LIMSConfig.LIMS_USER,
+            password=LIMSConfig.LIMS_PASSWORD
+        )
         
-        total_synced = 0
-        client_results = []
+        # Login to LIMS
+        if not scraper.login():
+            raise RuntimeError(f"Failed to login to LIMS for partition {date}")
         
-        for client_id in config.test_clients:
-            try:
-                with Scraper(client_id, config) as scraper:
-                    samples_count = scraper.scrape_client_data()
-                    
-                    if scraper.data and any(scraper.data.values()):
-                        sample_records = prepare_sample_data(scraper.data)
-                        
-                        # Sync with idempotent API call
-                        hub_client = QuimiOSHubClient(
-                            config.hub_api_url,
-                            config.hub_api_key
-                        )
-                        
-                        synced = hub_client.sync_samples(sample_records)
-                        total_synced += synced
-                        
-                        client_results.append({
-                            'client_id': client_id,
-                            'synced': synced,
-                            'status': 'success'
-                        })
-                    else:
-                        client_results.append({
-                            'client_id': client_id,
-                            'synced': 0,
-                            'status': 'no_data'
-                        })
-                        
-            except Exception as e:
-                logging.error(f"Client {client_id} failed: {e}")
-                client_results.append({
-                    'client_id': client_id,
-                    'error': str(e),
-                    'status': 'error'
-                })
+        logging.info(f"Logged into LIMS for partition {date}")
+        
+        # Scrape samples
+        all_records = []
+        max_pages = 10
+        
+        for page in range(1, max_pages + 1):
+            records = scraper.get_samples_page(page)
+            if not records:
+                break
+            all_records.extend(records)
+        
+        logging.info(f"Scraped {len(all_records)} records for partition {date}")
+        
+        # Transform to API format
+        sample_records = []
+        for record in all_records:
+            sample_records.append({
+                'folio': record.get('Folio'),
+                'clientId': int(record.get('ClientId', 0)),
+                'patientId': int(record.get('PatientId', 0)),
+                'examId': int(record.get('ExamId', 0)),
+                'examName': record.get('ExamName'),
+                'createdAt': record.get('CreatedAt'),
+                'receivedAt': record.get('ReceivedAt'),
+                'processedAt': record.get('ProcessedAt'),
+                'validatedAt': record.get('ValidatedAt'),
+                'location': record.get('Location'),
+                'outsourcer': record.get('Outsourcer'),
+                'priority': record.get('Priority'),
+                'birthDate': record.get('BirthDate'),
+                'partitionDate': date,
+            })
+        
+        # Sync with idempotent API call
+        hub_client = QuimiOSHubClient(
+            config.hub_api_url,
+            config.hub_api_key
+        )
+        
+        total_synced = hub_client.sync_samples(sample_records)
         
         result = {
             'date': date,
+            'total_scraped': len(all_records),
             'total_synced': total_synced,
-            'clients': client_results,
             'status': 'completed' if total_synced > 0 else 'no_data'
         }
         
