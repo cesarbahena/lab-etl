@@ -95,6 +95,9 @@ def lims_etl_dag():
         """
         Scrape sample data from LIMS WebForms.
         
+        Uses HTTP scraper (http_scraper.py) for better performance.
+        See scraper_selenium_deprecated.py for the original Selenium implementation.
+        
         Args:
             execution_date: The date to process (ds from Airflow)
                           Format: YYYY-MM-DD
@@ -115,72 +118,74 @@ def lims_etl_dag():
         
         # Import ETL modules
         from lims_etl.config import LIMSConfig
-        from lims_etl.scraper import Scraper
+        from lims_etl.http_scraper import HTTPScraper
         from lims_etl.api_client import QuimiOSHubClient
         
-        # Initialize config and client
+        # Initialize config
         config = LIMSConfig()
         
-        # Override date range for this execution
-        # Parse execution_date and set as the newer limit
-        exec_dt = datetime.strptime(execution_date, '%Y-%m-%d')
-        config.start_date = exec_dt
-        config.end_date = datetime(2021, 1, 15)  # Historical limit
+        # Create HTTP scraper
+        scraper = HTTPScraper(
+            base_url=LIMSConfig.LIMS_URL,
+            username=LIMSConfig.LIMS_USER,
+            password=LIMSConfig.LIMS_PASSWORD
+        )
         
-        # Scrape for each configured client
-        total_synced = 0
-        client_results = []
+        # Login to LIMS
+        if not scraper.login():
+            raise RuntimeError("Failed to login to LIMS")
         
-        for client_id in config.test_clients:
-            try:
-                with Scraper(client_id, config) as scraper:
-                    samples_count = scraper.scrape_client_data()
-                    
-                    if scraper.data and any(scraper.data.values()):
-                        from lims_etl.scraper import prepare_sample_data
-                        sample_records = prepare_sample_data(scraper.data)
-                        
-                        # Initialize API client
-                        hub_client = QuimiOSHubClient(
-                            config.hub_api_url,
-                            config.hub_api_key
-                        )
-                        
-                        synced = hub_client.sync_samples(sample_records)
-                        total_synced += synced
-                        
-                        client_results.append({
-                            'client_id': client_id,
-                            'scraped': samples_count,
-                            'synced': synced
-                        })
-                        
-                        logging.info(
-                            f"Client {client_id}: {synced}/{samples_count} synced"
-                        )
-                    else:
-                        logging.warning(f"No data found for client {client_id}")
-                        client_results.append({
-                            'client_id': client_id,
-                            'scraped': 0,
-                            'synced': 0
-                        })
-                        
-            except Exception as e:
-                logging.error(f"Error processing client {client_id}: {e}")
-                # Continue with other clients, don't fail整个pipeline
-                client_results.append({
-                    'client_id': client_id,
-                    'error': str(e)
-                })
+        logging.info("Successfully logged into LIMS")
+        
+        # Scrape samples from multiple pages
+        all_records = []
+        max_pages = 10  # Safety limit
+        
+        for page in range(1, max_pages + 1):
+            records = scraper.get_samples_page(page)
+            if not records:
+                break
+            all_records.extend(records)
+            logging.info(f"Page {page}: fetched {len(records)} records")
+        
+        logging.info(f"Total records scraped: {len(all_records)}")
+        
+        # Transform to API format
+        sample_records = []
+        for record in all_records:
+            sample_records.append({
+                'folio': record.get('Folio'),
+                'clientId': int(record.get('ClientId', 0)),
+                'patientId': int(record.get('PatientId', 0)),
+                'examId': int(record.get('ExamId', 0)),
+                'examName': record.get('ExamName'),
+                'createdAt': record.get('CreatedAt'),
+                'receivedAt': record.get('ReceivedAt'),
+                'processedAt': record.get('ProcessedAt'),
+                'validatedAt': record.get('ValidatedAt'),
+                'location': record.get('Location'),
+                'outsourcer': record.get('Outsourcer'),
+                'priority': record.get('Priority'),
+                'birthDate': record.get('BirthDate'),
+                'partitionDate': execution_date,
+            })
+        
+        # Sync to lab-hub API
+        hub_client = QuimiOSHubClient(
+            config.hub_api_url,
+            config.hub_api_key
+        )
+        
+        total_synced = hub_client.sync_samples(sample_records)
+        
+        logging.info(f"Synced {total_synced} samples to lab-hub")
         
         result = {
             'execution_date': execution_date,
+            'total_scraped': len(all_records),
             'total_synced': total_synced,
-            'clients': client_results
         }
         
-        logging.info(f"Scrape complete: {total_synced} samples synced")
         return result
     
     @task(
@@ -260,16 +265,9 @@ def lims_etl_dag():
         LIMS ETL Execution Summary
         ============================
         Date: {data.get('execution_date')}
+        Total Scraped: {data.get('total_scraped', 0)}
         Total Synced: {data.get('total_synced', 0)}
-        
-        Client Results:
         """
-        
-        for client in data.get('clients', []):
-            if 'error' in client:
-                summary += f"  Client {client['client_id']}: ERROR\n"
-            else:
-                summary += f"  Client {client['client_id']}: {client['synced']} synced\n"
         
         logging.info(summary)
         
