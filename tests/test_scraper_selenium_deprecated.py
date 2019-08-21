@@ -1,5 +1,10 @@
 """
-Unit tests for LIMS scraper pagination and date parsing.
+Unit tests for deprecated Selenium scraper.
+
+DEPRECATED: This scraper has been replaced by http_scraper.py.
+This file is kept for historical reference and comparison.
+
+See benchmark_scraper.py for performance comparison results.
 """
 
 import pytest
@@ -11,7 +16,7 @@ from selenium.common.exceptions import (
 )
 from selenium import webdriver
 
-from lims_etl.scraper import Scraper
+from lims_etl.scraper_selenium_deprecated import Scraper
 from lims_etl.config import LIMSConfig
 
 
@@ -69,7 +74,7 @@ class TestPagination:
 
         mock_driver.find_element.side_effect = find_element
 
-        with patch('lims_etl.scraper.sleep'):
+        with patch('lims_etl.scraper_selenium_deprecated.sleep'):
             result = scraper.go_to_next_page()
 
         assert result is True
@@ -97,7 +102,7 @@ class TestPagination:
 
         mock_driver.find_element.side_effect = find_element
 
-        with patch('lims_etl.scraper.sleep') as mock_sleep:
+        with patch('lims_etl.scraper_selenium_deprecated.sleep') as mock_sleep:
             scraper.go_to_next_page()
 
         mock_sleep.assert_called_once_with(config.sleep_time)
@@ -106,7 +111,7 @@ class TestPagination:
         scraper = make_scraper(config, mock_driver)
         mock_driver.find_element.side_effect = NoSuchElementException()
 
-        with patch('lims_etl.scraper.sleep') as mock_sleep:
+        with patch('lims_etl.scraper_selenium_deprecated.sleep') as mock_sleep:
             scraper.go_to_next_page()
 
         mock_sleep.assert_not_called()
@@ -127,7 +132,7 @@ class TestPagination:
 
         mock_driver.find_element.side_effect = find_element
 
-        with patch('lims_etl.scraper.sleep'):
+        with patch('lims_etl.scraper_selenium_deprecated.sleep'):
             assert scraper.go_to_next_page() is True
             assert scraper.go_to_next_page() is True
 
@@ -139,7 +144,7 @@ class TestPagination:
 
         assert scraper.has_next_page() is False
 
-        with patch('lims_etl.scraper.sleep'):
+        with patch('lims_etl.scraper_selenium_deprecated.sleep'):
             assert scraper.go_to_next_page() is False
 
 

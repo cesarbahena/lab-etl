@@ -49,7 +49,7 @@ class WebFormsStateManager:
     @staticmethod
     def find_field(html: str, field_name: str) -> Optional[str]:
         """Find a specific field by name."""
-        soup = BeautifulSoup(html, 'lxml')
+        soup = BeautifulSoup(html, 'html.parser')
         inp = soup.find('input', {'name': field_name})
         return inp.get('value') if inp else None
 
