@@ -199,7 +199,7 @@ def lims_etl_backfill_dag():
         # Import ETL components
         from lims_etl.config import LIMSConfig
         from lims_etl.http_scraper import HTTPScraper
-        from lims_etl.api_client import QuimiOSHubClient
+        from lims_etl.api_client import LIMSApiClient
         
         # Configure execution
         config = LIMSConfig()
@@ -250,7 +250,7 @@ def lims_etl_backfill_dag():
             })
         
         # Sync with idempotent API call
-        hub_client = QuimiOSHubClient(
+        hub_client = LIMSApiClient(
             config.hub_api_url,
             config.hub_api_key
         )

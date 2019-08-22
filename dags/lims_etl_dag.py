@@ -14,7 +14,7 @@ Key Features:
 DAG Variables (via Airflow Variables or .env):
     HUB_API_URL: http://app:8080
     DB_HOST: postgres
-    DB_USER: quimios_dev
+    DB_USER: lims_dev
     DB_PASSWORD: dev_password
 """
 
@@ -119,7 +119,7 @@ def lims_etl_dag():
         # Import ETL modules
         from lims_etl.config import LIMSConfig
         from lims_etl.http_scraper import HTTPScraper
-        from lims_etl.api_client import QuimiOSHubClient
+        from lims_etl.api_client import LIMSApiClient
         
         # Initialize config
         config = LIMSConfig()
@@ -171,7 +171,7 @@ def lims_etl_dag():
             })
         
         # Sync to lab-hub API
-        hub_client = QuimiOSHubClient(
+        hub_client = LIMSApiClient(
             config.hub_api_url,
             config.hub_api_key
         )

@@ -7,7 +7,7 @@ import pytest
 from unittest.mock import MagicMock, patch, Mock
 import pandas as pd
 
-from lims_etl.api_client import QuimiOSHubClient
+from lims_etl.api_client import LIMSApiClient
 
 
 @pytest.fixture
@@ -17,7 +17,7 @@ def mock_session():
 
 @pytest.fixture
 def api_client_with_mock(mock_session):
-    client = QuimiOSHubClient.__new__(QuimiOSHubClient)
+    client = LIMSApiClient.__new__(LIMSApiClient)
     client.base_url = "http://localhost:8080"
     client.api_key = "test_key"
     client.session = mock_session
@@ -32,7 +32,7 @@ class TestHealthCheck:
         mock_response.status_code = 200
         mock_session.get.return_value = mock_response
 
-        client = QuimiOSHubClient.__new__(QuimiOSHubClient)
+        client = LIMSApiClient.__new__(LIMSApiClient)
         client.base_url = "http://localhost:8080"
         client.api_key = "test_key"
         client.session = mock_session
@@ -43,7 +43,7 @@ class TestHealthCheck:
     def test_health_check_returns_false_on_failure(self, mock_session):
         mock_session.get.side_effect = Exception("Connection failed")
 
-        client = QuimiOSHubClient.__new__(QuimiOSHubClient)
+        client = LIMSApiClient.__new__(LIMSApiClient)
         client.base_url = "http://localhost:8080"
         client.api_key = "test_key"
         client.session = mock_session
@@ -60,7 +60,7 @@ class TestSampleSync:
         mock_response.status_code = 201
         mock_session.post.return_value = mock_response
 
-        client = QuimiOSHubClient.__new__(QuimiOSHubClient)
+        client = LIMSApiClient.__new__(LIMSApiClient)
         client.base_url = "http://localhost:8080"
         client.api_key = "test_key"
         client.session = mock_session
@@ -76,7 +76,7 @@ class TestSampleSync:
         assert result == 1
 
     def test_sync_samples_returns_zero_for_empty_list(self, mock_session):
-        client = QuimiOSHubClient.__new__(QuimiOSHubClient)
+        client = LIMSApiClient.__new__(LIMSApiClient)
         client.base_url = "http://localhost:8080"
         client.api_key = "test_key"
         client.session = mock_session
@@ -95,7 +95,7 @@ class TestSampleSync:
         mock_session.delete.return_value = mock_delete
         mock_session.post.return_value = mock_response
 
-        client = QuimiOSHubClient.__new__(QuimiOSHubClient)
+        client = LIMSApiClient.__new__(LIMSApiClient)
         client.base_url = "http://localhost:8080"
         client.api_key = "test_key"
         client.session = mock_session
@@ -123,7 +123,7 @@ class TestIdempotentSync:
         mock_session.delete.return_value = mock_delete
         mock_session.post.return_value = mock_post
 
-        client = QuimiOSHubClient.__new__(QuimiOSHubClient)
+        client = LIMSApiClient.__new__(LIMSApiClient)
         client.base_url = "http://localhost:8080"
         client.api_key = "test_key"
         client.session = mock_session
@@ -143,7 +143,7 @@ class TestIdempotentSync:
         assert 'deleted' in result
 
     def test_sync_idempotent_handles_empty_samples(self, mock_session):
-        client = QuimiOSHubClient.__new__(QuimiOSHubClient)
+        client = LIMSApiClient.__new__(LIMSApiClient)
         client.base_url = "http://localhost:8080"
         client.api_key = "test_key"
         client.session = mock_session
@@ -172,7 +172,7 @@ class TestIdempotentSync:
 
         mock_session.post.side_effect = side_effect
 
-        client = QuimiOSHubClient.__new__(QuimiOSHubClient)
+        client = LIMSApiClient.__new__(LIMSApiClient)
         client.base_url = "http://localhost:8080"
         client.api_key = "test_key"
         client.session = mock_session
@@ -198,7 +198,7 @@ class TestDeletePartition:
         mock_response.json.return_value = {'deleted': 10}
         mock_session.delete.return_value = mock_response
 
-        client = QuimiOSHubClient.__new__(QuimiOSHubClient)
+        client = LIMSApiClient.__new__(LIMSApiClient)
         client.base_url = "http://localhost:8080"
         client.api_key = "test_key"
         client.session = mock_session
@@ -211,7 +211,7 @@ class TestDeletePartition:
         mock_response.status_code = 404
         mock_session.delete.return_value = mock_response
 
-        client = QuimiOSHubClient.__new__(QuimiOSHubClient)
+        client = LIMSApiClient.__new__(LIMSApiClient)
         client.base_url = "http://localhost:8080"
         client.api_key = "test_key"
         client.session = mock_session
@@ -225,7 +225,7 @@ class TestDeletePartition:
         mock_response.json.return_value = {'deleted': 5}
         mock_session.delete.return_value = mock_response
 
-        client = QuimiOSHubClient.__new__(QuimiOSHubClient)
+        client = LIMSApiClient.__new__(LIMSApiClient)
         client.base_url = "http://localhost:8080"
         client.api_key = "test_key"
         client.session = mock_session
@@ -241,21 +241,21 @@ class TestDateFormatting:
     """Datetime formatting for API."""
 
     def test_format_datetime_handles_nat(self, mock_session):
-        client = QuimiOSHubClient.__new__(QuimiOSHubClient)
+        client = LIMSApiClient.__new__(LIMSApiClient)
         result = client._format_datetime(pd.NaT)
         assert result is None
 
     def test_format_datetime_handles_none(self, mock_session):
-        client = QuimiOSHubClient.__new__(QuimiOSHubClient)
+        client = LIMSApiClient.__new__(LIMSApiClient)
         result = client._format_datetime(None)
         assert result is None
 
     def test_format_date_handles_nat(self, mock_session):
-        client = QuimiOSHubClient.__new__(QuimiOSHubClient)
+        client = LIMSApiClient.__new__(LIMSApiClient)
         result = client._format_date(pd.NaT)
         assert result is None
 
     def test_format_date_handles_none(self, mock_session):
-        client = QuimiOSHubClient.__new__(QuimiOSHubClient)
+        client = LIMSApiClient.__new__(LIMSApiClient)
         result = client._format_date(None)
         assert result is None

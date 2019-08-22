@@ -1,5 +1,5 @@
 """
-API Client for QuimiOSHub cloud synchronization
+API Client for LIMS data synchronization
 
 Key Features:
 - Idempotent: Safe to re-run without duplicates
@@ -17,8 +17,8 @@ from datetime import datetime
 reg = logging.getLogger(__name__)
 
 
-class QuimiOSHubClient:
-    """Client for syncing data to QuimiOSHub cloud API"""
+class LIMSApiClient:
+    """Client for syncing exam data to LIMS Hub API"""
 
     def __init__(self, base_url: str, api_key: Optional[str] = None):
         self.base_url = base_url.rstrip('/')
@@ -30,7 +30,7 @@ class QuimiOSHubClient:
 
         self.session.headers.update({
             'Content-Type': 'application/json',
-            'User-Agent': 'quimios-etl/1.0'
+            'User-Agent': 'lims-etl/1.0'
         })
 
     def health_check(self) -> bool:
@@ -42,9 +42,9 @@ class QuimiOSHubClient:
             reg.error(f"Health check failed: {e}")
             return False
 
-    def delete_partition_samples(self, partition_date: str, client_id: Optional[int] = None) -> int:
+    def delete_partition_exams(self, partition_date: str, client_id: Optional[int] = None) -> int:
         """
-        Delete samples for a partition date (idempotency).
+        Delete exams for a partition date (idempotency).
         
         This enables the DELETE + INSERT pattern for safe backfills:
         1. DELETE all records for this date
@@ -64,7 +64,7 @@ class QuimiOSHubClient:
                 params['client_id'] = client_id
             
             response = self.session.delete(
-                f'{self.base_url}/api/samples/partition',
+                f'{self.base_url}/api/exams/partition',
                 params=params,
                 timeout=10
             )
@@ -72,7 +72,7 @@ class QuimiOSHubClient:
             if response.status_code == 200:
                 result = response.json()
                 deleted = result.get('deleted', 0)
-                reg.info(f"Deleted {deleted} samples for partition {partition_date}")
+                reg.info(f"Deleted {deleted} exams for partition {partition_date}")
                 return deleted
             elif response.status_code == 404:
                 # No records to delete - this is fine
@@ -86,26 +86,26 @@ class QuimiOSHubClient:
             reg.error(f"Error deleting partition {partition_date}: {e}")
             return 0
 
-    def sync_samples(self, samples: List[Dict]) -> int:
-        """Sync samples - returns count synced (legacy compatibility)."""
+    def sync_exams(self, exams: List[Dict]) -> int:
+        """Sync exams - returns count synced (legacy compatibility)."""
         from datetime import date
-        if not samples:
+        if not exams:
             return 0
         today = date.today().isoformat()
-        result = self.sync_samples_idempotent(samples, partition_date=today)
+        result = self.sync_exams_idempotent(exams, partition_date=today)
         return result['inserted']
 
-    def sync_samples_idempotent(self, samples: List[Dict], partition_date: str) -> dict:
+    def sync_exams_idempotent(self, exams: List[Dict], partition_date: str) -> dict:
         """
-        Sync samples with idempotency via DELETE + INSERT pattern.
+        Sync exams with idempotency via DELETE + INSERT pattern.
         
         This is the production-grade method for safe re-runs:
-        - First deletes all samples for the partition date
-        - Then inserts all provided samples
+        - First deletes all exams for the partition date
+        - Then inserts all provided exams
         - Result is always consistent regardless of retry count
         
         Args:
-            samples: List of sample records to sync
+            exams: List of exam records to sync
             partition_date: Date string (YYYY-MM-DD) for this batch
             
         Returns:
@@ -113,7 +113,7 @@ class QuimiOSHubClient:
         """
         stats = {
             'partition_date': partition_date,
-            'total': len(samples),
+            'total': len(exams),
             'inserted': 0,
             'updated': 0,
             'deleted': 0,
@@ -121,22 +121,22 @@ class QuimiOSHubClient:
             'errors': []
         }
         
-        if not samples:
-            reg.info(f"No samples to sync for partition {partition_date}")
+        if not exams:
+            reg.info(f"No exams to sync for partition {partition_date}")
             return stats
         
         # Step 1: Delete existing records for this partition (idempotency)
-        stats['deleted'] = self.delete_partition_samples(partition_date)
+        stats['deleted'] = self.delete_partition_exams(partition_date)
         
-        # Step 2: Insert all samples
-        for sample in samples:
+        # Step 2: Insert all exams
+        for exam in exams:
             for attempt in range(3):  # Retry up to 3 times
                 try:
-                    api_sample = self._convert_sample_format(sample)
+                    api_exam = self._convert_exam_format(exam)
                     
                     response = self.session.post(
-                        f'{self.base_url}/api/samples',
-                        json=api_sample,
+                        f'{self.base_url}/api/exams',
+                        json=api_exam,
                         timeout=10
                     )
                     
@@ -144,11 +144,11 @@ class QuimiOSHubClient:
                         stats['inserted'] += 1
                         break
                     elif response.status_code == 409:
-                        # Conflict - sample already exists (shouldn't happen after delete)
+                        # Conflict - exam already exists (shouldn't happen after delete)
                         stats['updated'] += 1
                         break
                     else:
-                        reg.warning(f"Failed to sync sample: HTTP {response.status_code}")
+                        reg.warning(f"Failed to sync exam: HTTP {response.status_code}")
                         
                 except Exception as e:
                     if attempt < 2:  # Retry with backoff
@@ -158,7 +158,7 @@ class QuimiOSHubClient:
                     else:
                         stats['failed'] += 1
                         stats['errors'].append({
-                            'folio': sample.get('Folio'),
+                            'folio': exam.get('Folio'),
                             'error': str(e)
                         })
         
@@ -168,23 +168,31 @@ class QuimiOSHubClient:
         
         return stats
 
-    def _convert_sample_format(self, sample: Dict) -> Dict:
-        """Convert ETL sample format to API format"""
+    # Aliases for backwards compatibility
+    sync_samples = sync_exams
+    sync_samples_idempotent = sync_exams_idempotent
+    delete_partition_samples = delete_partition_exams
+
+    def _convert_exam_format(self, exam: Dict) -> Dict:
+        """Convert ETL exam format to API format"""
         return {
-            'createdAt': self._format_datetime(sample.get('CreatedAt')),
-            'receivedAt': self._format_datetime(sample.get('ReceivedAt')),
-            'folio': int(sample.get('Folio', 0)),
-            'clientId': int(sample.get('ClientId', 0)),
-            'patientId': int(sample.get('PatientId', 0)),
-            'examId': int(sample.get('ExamId', 0)),
-            'examName': str(sample.get('ExamName', '')),
-            'processedAt': self._format_datetime(sample.get('ProcessedAt')),
-            'validatedAt': self._format_datetime(sample.get('ValidatedAt')),
-            'location': str(sample.get('Location', '')),
-            'outsourcer': str(sample.get('Outsourcer', '')),
-            'priority': str(sample.get('Priority', '')),
-            'birthDate': self._format_date(sample.get('BirthDate'))
+            'createdAt': self._format_datetime(exam.get('CreatedAt')),
+            'receivedAt': self._format_datetime(exam.get('ReceivedAt')),
+            'folio': int(exam.get('Folio', 0)),
+            'clientId': int(exam.get('ClientId', 0)),
+            'patientId': int(exam.get('PatientId', 0)),
+            'examId': int(exam.get('ExamId', 0)),
+            'examName': str(exam.get('ExamName', '')),
+            'processedAt': self._format_datetime(exam.get('ProcessedAt')),
+            'validatedAt': self._format_datetime(exam.get('ValidatedAt')),
+            'location': str(exam.get('Location', '')),
+            'outsourcer': str(exam.get('Outsourcer', '')),
+            'priority': str(exam.get('Priority', '')),
+            'birthDate': self._format_date(exam.get('BirthDate'))
         }
+
+    # Alias for backwards compatibility
+    _convert_sample_format = _convert_exam_format
 
     def _format_datetime(self, dt) -> Optional[str]:
         """Format datetime for API"""

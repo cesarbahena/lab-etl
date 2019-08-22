@@ -2,7 +2,7 @@ import logging
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
-from src.lims_etl.config import LIMSConfig
+from lims_etl.config import LIMSConfig
 
 reg = logging.getLogger(__name__)
 

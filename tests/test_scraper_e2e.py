@@ -11,7 +11,7 @@ import signal
 import requests
 from typing import Optional
 
-from lims_etl.http_scraper import HTTPScraper
+from lims_etl.scraper import HTTPScraper
 
 
 # ============================================================================
@@ -94,7 +94,7 @@ def scraper_url(mock_server):
 @pytest.fixture
 def scraper(mock_server):
     """Create an HTTP scraper instance connected to mock server."""
-    from lims_etl.http_scraper import HTTPScraper
+    from lims_etl.scraper import HTTPScraper
     return HTTPScraper(mock_server, 'demo_user', 'demo_pass')
 
 
@@ -294,7 +294,7 @@ class TestE2ERealisticWorkflow:
 
     def test_concurrent_scrapers_are_independent(self, mock_server):
         """Multiple scraper instances should not interfere."""
-        from lims_etl.http_scraper import HTTPScraper
+        from lims_etl.scraper import HTTPScraper
         
         # Create two scrapers
         scraper1 = HTTPScraper(mock_server, 'demo_user', 'demo_pass')

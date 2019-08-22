@@ -16,7 +16,7 @@ from selenium.common.exceptions import (
 )
 from selenium import webdriver
 
-from lims_etl.scraper_selenium_deprecated import Scraper
+from lims_etl.selenium_scraper import Scraper
 from lims_etl.config import LIMSConfig
 
 
@@ -74,7 +74,7 @@ class TestPagination:
 
         mock_driver.find_element.side_effect = find_element
 
-        with patch('lims_etl.scraper_selenium_deprecated.sleep'):
+        with patch('lims_etl.selenium_scraper.sleep'):
             result = scraper.go_to_next_page()
 
         assert result is True
@@ -102,7 +102,7 @@ class TestPagination:
 
         mock_driver.find_element.side_effect = find_element
 
-        with patch('lims_etl.scraper_selenium_deprecated.sleep') as mock_sleep:
+        with patch('lims_etl.selenium_scraper.sleep') as mock_sleep:
             scraper.go_to_next_page()
 
         mock_sleep.assert_called_once_with(config.sleep_time)
@@ -111,7 +111,7 @@ class TestPagination:
         scraper = make_scraper(config, mock_driver)
         mock_driver.find_element.side_effect = NoSuchElementException()
 
-        with patch('lims_etl.scraper_selenium_deprecated.sleep') as mock_sleep:
+        with patch('lims_etl.selenium_scraper.sleep') as mock_sleep:
             scraper.go_to_next_page()
 
         mock_sleep.assert_not_called()
@@ -132,7 +132,7 @@ class TestPagination:
 
         mock_driver.find_element.side_effect = find_element
 
-        with patch('lims_etl.scraper_selenium_deprecated.sleep'):
+        with patch('lims_etl.selenium_scraper.sleep'):
             assert scraper.go_to_next_page() is True
             assert scraper.go_to_next_page() is True
 
@@ -144,7 +144,7 @@ class TestPagination:
 
         assert scraper.has_next_page() is False
 
-        with patch('lims_etl.scraper_selenium_deprecated.sleep'):
+        with patch('lims_etl.selenium_scraper.sleep'):
             assert scraper.go_to_next_page() is False
 
 

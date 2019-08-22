@@ -6,7 +6,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 from bs4 import BeautifulSoup
 
-from lims_etl.http_scraper import WebFormsStateManager, HTTPScraper
+from lims_etl.scraper import WebFormsStateManager, HTTPScraper
 
 
 # ============================================================================

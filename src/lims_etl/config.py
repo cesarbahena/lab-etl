@@ -18,7 +18,7 @@ class LIMSConfig:
         self.base_url = os.getenv('LIMS_BASE_URL', 'http://172.16.0.117')
         self.use_local_fixtures = os.getenv('LIMS_USE_LOCAL_FIXTURES', 'false').lower() == 'true'
 
-        # QuimiOSHub API configuration (required)
+        # LIMS Hub API configuration (required)
         self.hub_api_url = os.getenv('HUB_API_URL', '')
         self.hub_api_key = os.getenv('HUB_API_KEY', '')
 

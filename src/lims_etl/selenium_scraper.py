@@ -13,8 +13,8 @@ import pathlib
 import argparse
 from typing import Dict, List, Optional
 from .config import LIMSConfig
-from .browser import Browser
-from .api_client import QuimiOSHubClient
+from .browser_selenium import Browser
+from .api_client import LIMSApiClient
 
 # Configure logging
 logging.basicConfig(
@@ -317,7 +317,7 @@ def prepare_sample_data(scraper_data: Dict[str, List]) -> List[Dict]:
 
 def main():
     """Main execution function"""
-    parser = argparse.ArgumentParser(description='LIMS ETL - Extract sample data from LIMS and sync to QuimiOSHub')
+    parser = argparse.ArgumentParser(description='LIMS ETL - Extract sample data from LIMS and sync to LIMS Hub')
     parser.add_argument('--start-date', type=str, help='Start date (YYYY-MM-DD) - newer limit')
     parser.add_argument('--end-date', type=str, help='End date (YYYY-MM-DD) - older limit')
     parser.add_argument('--max-empty-pages', type=int, help='Max consecutive empty pages before stopping')
@@ -340,17 +340,17 @@ def main():
         reg.info(f'Date range: {config.start_date.date()} (newer) > samples > {config.end_date.date()} (older)')
         reg.info(f'Max consecutive empty pages: {config.max_empty_pages}')
 
-        # Initialize QuimiOSHub API client (required)
+        # Initialize LIMS Hub API client (required)
         if not config.hub_api_url:
             raise ValueError("HUB_API_URL not configured in .env file")
 
-        reg.info(f'Initializing QuimiOSHub API client: {config.hub_api_url}')
-        hub_client = QuimiOSHubClient(config.hub_api_url, config.hub_api_key)
+        reg.info(f'Initializing LIMS Hub API client: {config.hub_api_url}')
+        hub_client = LIMSApiClient(config.hub_api_url, config.hub_api_key)
 
         if not hub_client.health_check():
-            raise ConnectionError('QuimiOSHub API is not accessible. Please check the API is running.')
+            raise ConnectionError('LIMS Hub API is not accessible. Please check the API is running.')
 
-        reg.info('QuimiOSHub API connection successful')
+        reg.info('LIMS Hub API connection successful')
         total_synced = 0
 
         for client_id in config.test_clients:
@@ -364,9 +364,9 @@ def main():
                         # Convert scraper data to API format
                         sample_records = prepare_sample_data(scraper.data)
 
-                        # Push directly to QuimiOSHub API
+                        # Push directly to LIMS Hub API
                         synced_count = hub_client.sync_samples(sample_records)
-                        reg.info(f'Client {client_id}: {synced_count}/{len(sample_records)} samples synced to QuimiOSHub')
+                        reg.info(f'Client {client_id}: {synced_count}/{len(sample_records)} samples synced to LIMS Hub')
                         total_synced += synced_count
                     else:
                         reg.warning(f'No data found for client {client_id}')
