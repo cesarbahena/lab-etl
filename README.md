@@ -1,11 +1,11 @@
-# LIMS Sample Tracker ETL
+# Lab ETL
 
 Clinical laboratory exam tracking system that extracts data from legacy LIMS web interface (ASP.NET WebForms) and syncs to LIMS Hub API.
 
 ## Architecture
 
 ```
-LIMS WebForms (ASP.NET) → HTTP Scraper → LIMS Hub API → lab-hub DB
+LIMS WebForms (ASP.NET) → HTTP scraper → LIMS Hub API → PostgreSQL
                                       ↑
                                  Airflow DAGs
 ```
@@ -32,37 +32,58 @@ The LIMS uses ASP.NET WebForms with state management (`__VIEWSTATE`, `__EVENTVAL
 
 See `benchmark_scraper.py` for performance comparison.
 
-## Quick Start
+## Local synthetic smoke test
+
+Start PostgreSQL and the Hub as described in the sibling `../hub/README.md`. Run the WebForms mock in another terminal:
 
 ```bash
-# Install dependencies
-pip install -e .
+dotnet run --project webforms_mock/QuimiOSWebForms.csproj --urls http://localhost:5150
+```
 
-# Configure environment
-cp .env.example .env
-# Edit .env with your settings
+Install the Python package and pytest, then run the suite. The WebForms E2E tests use port 5150 and detect the already running mock on Windows.
 
-# Run HTTP scraper against mock server
-python -m lims_etl.scraper --url http://localhost:5090
+```bash
+python -m pip install -e . pytest
+python -m pytest tests/ -q
+```
 
-# Run tests
-pytest tests/
+To exercise one complete synthetic exam sync, open `python` in the ETL directory and run:
+
+```python
+from lims_etl.scraper import HTTPScraper
+from lims_etl.api_client import LIMSApiClient
+
+scraper = HTTPScraper("http://localhost:5150")
+assert scraper.login()
+client = LIMSApiClient("http://localhost:5181")
+exams = client.exams_for_partition(scraper.get_samples_page(1), "2023-03-20")
+result = client.sync_exams_idempotent(exams, "2023-03-20")
+print(result)
+```
+
+The mock's first page contains one exam received on 20 March 2023. Repeating the snippet atomically replaces that date's Hub records; `deleted` should then be nonzero. This flow changes only the local demo database configured for Hub. See `../hub/README.md` for the GET request that inspects the partition.
+
+## Standalone scraper
+
+```bash
+# Set LIMS_BASE_URL=http://localhost:5150 in your shell, then run the scraper
+python -m lims_etl.scraper
 
 # Run benchmark
-python benchmark_scraper.py --url http://localhost:5090 --pages 10
+python benchmark_scraper.py --url http://localhost:5150 --pages 10
 ```
 
 ## Development
 
 ```bash
 # Start mock WebForms server (requires .NET 10)
-cd webforms_mock && dotnet run --urls="http://localhost:5090"
+dotnet run --project webforms_mock/QuimiOSWebForms.csproj --urls http://localhost:5150
 
 # Run unit tests only
 pytest tests/test_scraper.py -v
 
-# Run e2e tests (requires mock server)
-pytest tests/test_scraper_e2e.py -v
+# Run E2E tests (requires mock server on port 5150)
+python -m pytest tests/test_scraper_e2e.py -v
 ```
 
 ## Project Structure
@@ -84,20 +105,17 @@ lab-etl/
 
 ## Configuration
 
-See `.env.example` for required environment variables:
+The Airflow DAGs read these Airflow Variables or process environment values. The first three are required for a LIMS connection; `HUB_API_KEY` is optional for the current local Hub.
 
 ```
-LIMS_URL=https://lims.example.com
-LIMS_USER=your_username
+LIMS_BASE_URL=http://localhost:5150
+LIMS_USERNAME=your_username
 LIMS_PASSWORD=your_password
-HUB_API_URL=http://lab-hub:8080
-HUB_API_KEY=your_api_key
-DB_HOST=postgres
-DB_PORT=5432
-DB_NAME=lims_dev
-DB_USER=lims_dev
-DB_PASSWORD=dev_password
+HUB_API_URL=http://localhost:5181
+HUB_API_KEY=
 ```
+
+The DAGs select exams by `ReceivedAt` and send the batch to `POST /api/exams/partition?partitionDate=yyyy-MM-dd`. Hub validates the entire batch and replaces that partition in one database transaction. An explicit empty batch clears a partition; the DAGs reject an empty selection because their 10-page scrape limit cannot prove the LIMS date is truly empty. The daily DAG verifies the written partition through paged `GET /api/exams` results. Airflow execution and real LIMS behavior have not been verified by the local smoke path; the source timezone and complete historical pagination still need verification.
 
 ## License
 
