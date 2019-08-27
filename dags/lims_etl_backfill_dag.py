@@ -23,7 +23,7 @@ Trigger Methods:
 
 from datetime import datetime, timedelta
 from airflow.decorators import dag, task
-from airflow.models import Param, DagModel
+from airflow.models import Param, DagModel, Variable
 from airflow.operators.python import PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
 import logging
@@ -189,6 +189,7 @@ def lims_etl_backfill_dag():
         """
         import sys
         import logging
+        import os
         from datetime import datetime
         
         logging.info(f"Processing partition: {date}")
@@ -197,18 +198,22 @@ def lims_etl_backfill_dag():
         sys.path.insert(0, '/opt/airflow/src')
         
         # Import ETL components
-        from lims_etl.config import LIMSConfig
-        from lims_etl.http_scraper import HTTPScraper
+        from lims_etl.scraper import HTTPScraper
         from lims_etl.api_client import LIMSApiClient
         
-        # Configure execution
-        config = LIMSConfig()
+        lims_url = Variable.get('LIMS_BASE_URL', default_var=os.getenv('LIMS_BASE_URL', ''))
+        lims_user = Variable.get('LIMS_USERNAME', default_var=os.getenv('LIMS_USERNAME', ''))
+        lims_password = Variable.get('LIMS_PASSWORD', default_var=os.getenv('LIMS_PASSWORD', ''))
+        hub_url = Variable.get('HUB_API_URL', default_var=os.getenv('HUB_API_URL', 'http://app:8080'))
+        hub_api_key = Variable.get('HUB_API_KEY', default_var=os.getenv('HUB_API_KEY', ''))
+        if not lims_url or not lims_user or not lims_password:
+            raise ValueError('LIMS_BASE_URL, LIMS_USERNAME and LIMS_PASSWORD are required')
         
         # Create HTTP scraper
         scraper = HTTPScraper(
-            base_url=LIMSConfig.LIMS_URL,
-            username=LIMSConfig.LIMS_USER,
-            password=LIMSConfig.LIMS_PASSWORD
+            base_url=lims_url,
+            username=lims_user,
+            password=lims_password
         )
         
         # Login to LIMS
@@ -229,37 +234,23 @@ def lims_etl_backfill_dag():
         
         logging.info(f"Scraped {len(all_records)} records for partition {date}")
         
-        # Transform to API format
-        sample_records = []
-        for record in all_records:
-            sample_records.append({
-                'folio': record.get('Folio'),
-                'clientId': int(record.get('ClientId', 0)),
-                'patientId': int(record.get('PatientId', 0)),
-                'examId': int(record.get('ExamId', 0)),
-                'examName': record.get('ExamName'),
-                'createdAt': record.get('CreatedAt'),
-                'receivedAt': record.get('ReceivedAt'),
-                'processedAt': record.get('ProcessedAt'),
-                'validatedAt': record.get('ValidatedAt'),
-                'location': record.get('Location'),
-                'outsourcer': record.get('Outsourcer'),
-                'priority': record.get('Priority'),
-                'birthDate': record.get('BirthDate'),
-                'partitionDate': date,
-            })
-        
         # Sync with idempotent API call
         hub_client = LIMSApiClient(
-            config.hub_api_url,
-            config.hub_api_key
+            hub_url,
+            hub_api_key
         )
         
-        total_synced = hub_client.sync_samples(sample_records)
+        sample_records = hub_client.exams_for_partition(all_records, date)
+        if not sample_records:
+            raise RuntimeError(f"No exams found for {date}; partition was not replaced")
+        sync = hub_client.sync_exams_idempotent(sample_records, date)
+        if sync['failed']:
+            raise RuntimeError(f"Failed to sync {sync['failed']} exams for {date}")
+        total_synced = sync['inserted'] + sync['updated']
         
         result = {
             'date': date,
-            'total_scraped': len(all_records),
+            'total_scraped': len(sample_records),
             'total_synced': total_synced,
             'status': 'completed' if total_synced > 0 else 'no_data'
         }

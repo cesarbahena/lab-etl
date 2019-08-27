@@ -69,8 +69,9 @@ def lims_etl_dag():
         Prevents wasted scraping effort if downstream is down.
         """
         import requests
+        import os
         
-        hub_url = Variable.get('HUB_API_URL', default_var='http://app:8080')
+        hub_url = Variable.get('HUB_API_URL', default_var=os.getenv('HUB_API_URL', 'http://app:8080'))
         health_endpoint = f'{hub_url}/api/health/ping'
         
         try:
@@ -117,18 +118,22 @@ def lims_etl_dag():
         logging.info(f"Starting LIMS scrape for {execution_date}")
         
         # Import ETL modules
-        from lims_etl.config import LIMSConfig
-        from lims_etl.http_scraper import HTTPScraper
+        from lims_etl.scraper import HTTPScraper
         from lims_etl.api_client import LIMSApiClient
         
-        # Initialize config
-        config = LIMSConfig()
+        lims_url = Variable.get('LIMS_BASE_URL', default_var=os.getenv('LIMS_BASE_URL', ''))
+        lims_user = Variable.get('LIMS_USERNAME', default_var=os.getenv('LIMS_USERNAME', ''))
+        lims_password = Variable.get('LIMS_PASSWORD', default_var=os.getenv('LIMS_PASSWORD', ''))
+        hub_url = Variable.get('HUB_API_URL', default_var=os.getenv('HUB_API_URL', 'http://app:8080'))
+        hub_api_key = Variable.get('HUB_API_KEY', default_var=os.getenv('HUB_API_KEY', ''))
+        if not lims_url or not lims_user or not lims_password:
+            raise ValueError('LIMS_BASE_URL, LIMS_USERNAME and LIMS_PASSWORD are required')
         
         # Create HTTP scraper
         scraper = HTTPScraper(
-            base_url=LIMSConfig.LIMS_URL,
-            username=LIMSConfig.LIMS_USER,
-            password=LIMSConfig.LIMS_PASSWORD
+            base_url=lims_url,
+            username=lims_user,
+            password=lims_password
         )
         
         # Login to LIMS
@@ -150,39 +155,25 @@ def lims_etl_dag():
         
         logging.info(f"Total records scraped: {len(all_records)}")
         
-        # Transform to API format
-        sample_records = []
-        for record in all_records:
-            sample_records.append({
-                'folio': record.get('Folio'),
-                'clientId': int(record.get('ClientId', 0)),
-                'patientId': int(record.get('PatientId', 0)),
-                'examId': int(record.get('ExamId', 0)),
-                'examName': record.get('ExamName'),
-                'createdAt': record.get('CreatedAt'),
-                'receivedAt': record.get('ReceivedAt'),
-                'processedAt': record.get('ProcessedAt'),
-                'validatedAt': record.get('ValidatedAt'),
-                'location': record.get('Location'),
-                'outsourcer': record.get('Outsourcer'),
-                'priority': record.get('Priority'),
-                'birthDate': record.get('BirthDate'),
-                'partitionDate': execution_date,
-            })
-        
         # Sync to lab-hub API
         hub_client = LIMSApiClient(
-            config.hub_api_url,
-            config.hub_api_key
+            hub_url,
+            hub_api_key
         )
         
-        total_synced = hub_client.sync_samples(sample_records)
+        sample_records = hub_client.exams_for_partition(all_records, execution_date)
+        if not sample_records:
+            raise RuntimeError(f"No exams found for {execution_date}; partition was not replaced")
+        sync = hub_client.sync_exams_idempotent(sample_records, execution_date)
+        if sync['failed']:
+            raise RuntimeError(f"Failed to sync {sync['failed']} exams for {execution_date}")
+        total_synced = sync['inserted'] + sync['updated']
         
         logging.info(f"Synced {total_synced} samples to lab-hub")
         
         result = {
             'execution_date': execution_date,
-            'total_scraped': len(all_records),
+            'total_scraped': len(sample_records),
             'total_synced': total_synced,
         }
         
@@ -202,49 +193,45 @@ def lims_etl_dag():
         - No null values in critical columns
         """
         import requests
+        import os
         from datetime import datetime
         
         logging.info(f"Running data quality checks for {data.get('execution_date')}")
         
-        hub_url = Variable.get('HUB_API_URL', default_var='http://app:8080')
+        hub_url = Variable.get('HUB_API_URL', default_var=os.getenv('HUB_API_URL', 'http://app:8080'))
         
-        # Get samples from API
-        try:
+        partition_start = datetime.strptime(data['execution_date'], '%Y-%m-%d')
+        partition_end = partition_start + timedelta(days=1) - timedelta(microseconds=1)
+        params = {
+            'startDate': partition_start.isoformat(),
+            'endDate': partition_end.isoformat(),
+            'pageSize': 100,
+        }
+        response = requests.get(f'{hub_url}/api/exams', params=params, timeout=10)
+        response.raise_for_status()
+        result = response.json()
+        samples = result['data']
+        total = result['total']
+        for page in range(2, result['totalPages'] + 1):
             response = requests.get(
-                f'{hub_url}/api/samples',
-                params={'limit': 100},
-                timeout=10
+                f'{hub_url}/api/exams', params={**params, 'page': page}, timeout=10
             )
             response.raise_for_status()
-            samples = response.json().get('data', [])
-            
-            # Quality checks
-            checks = {
-                'total_samples': len(samples),
-                'has_data': len(samples) > 0,
-                'required_fields': ['folio', 'clientId', 'patientId', 'examName'],
-                'missing_fields': [],
-                'null_counts': {}
-            }
-            
-            # Check required fields
-            for field in checks['required_fields']:
-                missing = sum(1 for s in samples if s.get(field) is None)
-                if missing > 0:
-                    checks['missing_fields'].append(field)
-                    checks['null_counts'][field] = missing
-            
-            # Sample-level check
-            if len(samples) > 0:
-                sample = samples[0]
-                logging.info(f"Sample data: {sample.get('folio')}, {sample.get('examName')}")
-            
-            logging.info(f"Quality checks: {checks}")
-            return checks
-            
-        except Exception as e:
-            logging.error(f"Quality check failed: {e}")
-            return {'error': str(e)}
+            next_page = response.json()
+            if next_page['total'] != total:
+                raise RuntimeError('Exam count changed during partition verification')
+            samples.extend(next_page['data'])
+        required_fields = ['folio', 'clientId', 'patientId', 'examName']
+        missing_fields = [field for field in required_fields
+                          if any(sample.get(field) is None for sample in samples)]
+        if total != data['total_synced'] or len(samples) != total or missing_fields:
+            raise RuntimeError(
+                f"Partition {data['execution_date']} verification failed: "
+                f"Hub has {total}, synced {data['total_synced']}, "
+                f"missing fields {missing_fields}"
+            )
+        return {'total_samples': total, 'has_data': total > 0,
+                'required_fields': required_fields, 'missing_fields': []}
     
     @task(
         task_id='report_summary',

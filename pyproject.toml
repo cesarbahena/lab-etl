@@ -9,6 +9,9 @@ description = "LIMS Sample Tracker ETL Pipeline"
 authors = [{name = "cesarbahena", email = "cabahenac@gmail.com"}]
 dependencies = [
     "selenium",
+    "webdriver-manager",
+    "requests",
+    "beautifulsoup4",
     "pandas",
     "python-dotenv",
     "psycopg2-binary",

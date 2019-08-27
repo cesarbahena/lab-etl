@@ -3,7 +3,7 @@ API Client for LIMS data synchronization
 
 Key Features:
 - Idempotent: Safe to re-run without duplicates
-- Partition-aware: Supports DELETE + INSERT per date partition
+- Partition-aware: Replaces each date partition in one Hub transaction
 - Retry logic: Exponential backoff on transient failures
 - DLQ ready: Structured error handling
 """
@@ -12,7 +12,7 @@ import requests
 import logging
 import time
 from typing import List, Dict, Optional
-from datetime import datetime
+from datetime import date, datetime
 
 reg = logging.getLogger(__name__)
 
@@ -44,12 +44,10 @@ class LIMSApiClient:
 
     def delete_partition_exams(self, partition_date: str, client_id: Optional[int] = None) -> int:
         """
-        Delete exams for a partition date (idempotency).
-        
-        This enables the DELETE + INSERT pattern for safe backfills:
-        1. DELETE all records for this date
-        2. INSERT fresh records
-        3. Re-running produces same result (idempotent)
+        Delete a partition through the compatibility endpoint.
+
+        Use sync_exams_idempotent for atomic replacement. A separate DELETE
+        followed by POST requests does not preserve the old data on failure.
         
         Args:
             partition_date: Date string (YYYY-MM-DD) for partition
@@ -59,9 +57,9 @@ class LIMSApiClient:
             Number of records deleted
         """
         try:
-            params = {'partition_date': partition_date}
-            if client_id:
-                params['client_id'] = client_id
+            params = {'partitionDate': partition_date}
+            if client_id is not None:
+                params['clientId'] = client_id
             
             response = self.session.delete(
                 f'{self.base_url}/api/exams/partition',
@@ -69,44 +67,61 @@ class LIMSApiClient:
                 timeout=10
             )
             
-            if response.status_code == 200:
-                result = response.json()
-                deleted = result.get('deleted', 0)
-                reg.info(f"Deleted {deleted} exams for partition {partition_date}")
-                return deleted
-            elif response.status_code == 404:
-                # No records to delete - this is fine
-                reg.debug(f"No records found for partition {partition_date}")
-                return 0
-            else:
-                reg.warning(f"Delete partition failed: HTTP {response.status_code}")
-                return 0
+            if response.status_code != 200:
+                raise RuntimeError(f"Partition delete failed: HTTP {response.status_code}")
+
+            deleted = response.json()['deleted']
+            if not isinstance(deleted, int) or deleted < 0:
+                raise ValueError("Partition delete returned an invalid count")
+            reg.info(f"Deleted {deleted} exams for partition {partition_date}")
+            return deleted
                 
         except Exception as e:
             reg.error(f"Error deleting partition {partition_date}: {e}")
-            return 0
+            raise
 
     def sync_exams(self, exams: List[Dict]) -> int:
-        """Sync exams - returns count synced (legacy compatibility)."""
-        from datetime import date
+        """Replace complete client/date groups and return the count synced."""
         if not exams:
             return 0
-        today = date.today().isoformat()
-        result = self.sync_exams_idempotent(exams, partition_date=today)
-        return result['inserted']
 
-    def sync_exams_idempotent(self, exams: List[Dict], partition_date: str) -> dict:
+        groups = {}
+        for exam in exams:
+            received_at = self._format_datetime(exam.get('ReceivedAt'))
+            if received_at is None:
+                raise ValueError(f"Exam {exam.get('Folio')} has no ReceivedAt date")
+            client_id = int(exam['ClientId'])
+            if client_id <= 0:
+                raise ValueError(f"Exam {exam.get('Folio')} has no client ID")
+            groups.setdefault((received_at[:10], client_id), []).append(exam)
+
+        synced = 0
+        for (partition_date, client_id), group in groups.items():
+            result = self.sync_exams_idempotent(group, partition_date, client_id=client_id)
+            synced += result['inserted']
+        return synced
+
+    def exams_for_partition(self, exams: List[Dict], partition_date: str) -> List[Dict]:
+        """Keep exams received on one date, rejecting rows without a usable date."""
+        date.fromisoformat(partition_date)
+        selected = []
+        for exam in exams:
+            received_at = self._format_datetime(exam.get('ReceivedAt'))
+            if received_at is None:
+                raise ValueError(f"Exam {exam.get('Folio')} has no ReceivedAt date")
+            if received_at[:10] == partition_date:
+                selected.append(exam)
+        return selected
+
+    def sync_exams_idempotent(self, exams: List[Dict], partition_date: str,
+                              client_id: Optional[int] = None) -> dict:
         """
-        Sync exams with idempotency via DELETE + INSERT pattern.
-        
-        This is the production-grade method for safe re-runs:
-        - First deletes all exams for the partition date
-        - Then inserts all provided exams
-        - Result is always consistent regardless of retry count
+        Replace one Hub partition in a single request and database transaction.
         
         Args:
             exams: List of exam records to sync
             partition_date: Date string (YYYY-MM-DD) for this batch
+            client_id: Optional client filter for a client-specific partition
             
         Returns:
             Dict with sync statistics
@@ -121,52 +136,47 @@ class LIMSApiClient:
             'errors': []
         }
         
-        if not exams:
-            reg.info(f"No exams to sync for partition {partition_date}")
-            return stats
-        
-        # Step 1: Delete existing records for this partition (idempotency)
-        stats['deleted'] = self.delete_partition_exams(partition_date)
-        
-        # Step 2: Insert all exams
-        for exam in exams:
-            for attempt in range(3):  # Retry up to 3 times
-                try:
-                    api_exam = self._convert_exam_format(exam)
-                    
-                    response = self.session.post(
-                        f'{self.base_url}/api/exams',
-                        json=api_exam,
-                        timeout=10
-                    )
-                    
-                    if response.status_code in [200, 201]:
-                        stats['inserted'] += 1
-                        break
-                    elif response.status_code == 409:
-                        # Conflict - exam already exists (shouldn't happen after delete)
-                        stats['updated'] += 1
-                        break
-                    else:
-                        reg.warning(f"Failed to sync exam: HTTP {response.status_code}")
-                        
-                except Exception as e:
-                    if attempt < 2:  # Retry with backoff
-                        wait_time = (2 ** attempt) * 2  # 2, 4 seconds
-                        reg.debug(f"Retry {attempt + 1} after {wait_time}s: {e}")
-                        time.sleep(wait_time)
-                    else:
-                        stats['failed'] += 1
-                        stats['errors'].append({
-                            'folio': exam.get('Folio'),
-                            'error': str(e)
-                        })
-        
-        reg.info(f"Synced partition {partition_date}: "
-                 f"{stats['inserted']}/{stats['total']} inserted, "
-                 f"{stats['deleted']} deleted, {stats['failed']} failed")
-        
-        return stats
+        date.fromisoformat(partition_date)
+        api_exams = [self._convert_exam_format(exam) for exam in exams]
+        params = {'partitionDate': partition_date}
+        if client_id is not None:
+            params['clientId'] = client_id
+
+        last_error = None
+        for attempt in range(3):
+            try:
+                response = self.session.post(
+                    f'{self.base_url}/api/exams/partition',
+                    params=params,
+                    json=api_exams,
+                    timeout=30
+                )
+            except requests.RequestException as error:
+                last_error = error
+            else:
+                if response.status_code == 200:
+                    result = response.json()
+                    deleted = result['deleted']
+                    inserted = result['inserted']
+                    if (type(deleted) is not int or deleted < 0 or
+                            type(inserted) is not int or inserted != len(exams)):
+                        raise RuntimeError('Hub returned invalid partition counts')
+                    stats['deleted'] = deleted
+                    stats['inserted'] = inserted
+                    reg.info(f"Replaced partition {partition_date}: "
+                             f"{deleted} deleted, {inserted} inserted")
+                    return stats
+
+                last_error = RuntimeError(f"Partition replacement failed: HTTP {response.status_code}")
+                if response.status_code < 500:
+                    raise last_error
+
+            if attempt < 2:
+                wait_time = (2 ** attempt) * 2
+                reg.debug(f"Retry partition {partition_date} after {wait_time}s: {last_error}")
+                time.sleep(wait_time)
+
+        raise RuntimeError(f"Partition replacement failed after retries: {last_error}") from last_error
 
     # Aliases for backwards compatibility
     sync_samples = sync_exams
@@ -200,7 +210,16 @@ class LIMSApiClient:
             return None
 
         if isinstance(dt, str):
-            return dt
+            if not dt.strip():
+                return None
+            for pattern in ('%d/%m/%Y %I:%M:%S %p', '%d-%m-%Y %I:%M:%S %p',
+                            '%d/%m/%Y %H:%M:%S', '%d-%m-%Y %H:%M:%S',
+                            '%d/%m/%Y', '%d-%m-%Y'):
+                try:
+                    return datetime.strptime(dt, pattern).isoformat()
+                except ValueError:
+                    pass
+            return datetime.fromisoformat(dt).isoformat()
 
         try:
             return dt.isoformat()
@@ -213,7 +232,14 @@ class LIMSApiClient:
             return None
 
         if isinstance(dt, str):
-            return dt
+            if not dt.strip():
+                return None
+            for pattern in ('%d/%m/%Y', '%d-%m-%Y', '%Y-%m-%d'):
+                try:
+                    return datetime.strptime(dt, pattern).date().isoformat()
+                except ValueError:
+                    pass
+            raise ValueError(f"Unsupported date format: {dt}")
 
         try:
             return dt.strftime('%Y-%m-%d')
