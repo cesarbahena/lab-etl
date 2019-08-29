@@ -7,7 +7,6 @@ import pytest
 import subprocess
 import time
 import os
-import signal
 import requests
 from typing import Optional
 
@@ -50,39 +49,44 @@ def mock_server():
         text=True
     )
     if build_result.returncode != 0:
-        pytest.skip(f"Could not build mock server: {build_result.stderr}")
+        pytest.fail(f"Could not build mock server: {(build_result.stdout + build_result.stderr)[-2000:]}")
     
-    # Start the server
+    # Run the built DLL directly so the process we terminate owns the server.
     process = subprocess.Popen(
-        ["dotnet", "run", "--urls", MOCK_SERVER_URL],
+        ["dotnet", os.path.join(MOCK_PROJECT_DIR, "bin", "Debug", "net10.0", "QuimiOSWebForms.dll"),
+         "--urls", MOCK_SERVER_URL],
         cwd=MOCK_PROJECT_DIR,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        preexec_fn=os.setsid  # Create new process group for clean kill
+        stderr=subprocess.STDOUT,
     )
     
-    # Wait for server to start
-    max_wait = 30
-    for _ in range(max_wait):
-        try:
-            response = requests.get(f"{MOCK_SERVER_URL}/Login", timeout=1)
-            if response.status_code == 200:
-                break
-        except requests.exceptions.RequestException:
-            pass
-        time.sleep(0.5)
-    else:
-        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-        pytest.skip("Mock server failed to start within timeout")
-    
-    yield MOCK_SERVER_URL
-    
-    # Cleanup: stop the server
     try:
-        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-        process.wait(timeout=5)
-    except Exception:
-        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                output = process.communicate()[0].decode(errors="replace")
+                pytest.fail(f"Mock server exited before startup: {output[-2000:]}")
+            try:
+                response = requests.get(f"{MOCK_SERVER_URL}/Login", timeout=1)
+                if response.status_code == 200:
+                    break
+            except requests.exceptions.RequestException:
+                pass
+            time.sleep(0.5)
+        else:
+            pytest.fail("Mock server failed to start within 30 seconds")
+
+        yield MOCK_SERVER_URL
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+        if process.stdout:
+            process.stdout.close()
 
 
 @pytest.fixture
