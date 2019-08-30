@@ -35,7 +35,7 @@ class LIMSConfig:
         else:
             self.start_date = datetime.now() - timedelta(days=1)
 
-        end_date_str = os.getenv('LIMS_END_DATE', '2021-01-15')
+        end_date_str = os.getenv('LIMS_END_DATE', '2019-08-29')
         self.end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
 
         self.max_empty_pages = int(os.getenv('LIMS_MAX_EMPTY_PAGES', '5'))

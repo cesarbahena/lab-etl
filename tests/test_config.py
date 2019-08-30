@@ -67,14 +67,14 @@ class TestConfigDates:
             assert (expected - config.start_date).total_seconds() < 5
 
     def test_end_date_from_env(self):
-        with patch.dict('os.environ', {'LIMS_END_DATE': '2021-01-15'}):
+        with patch.dict('os.environ', {'LIMS_END_DATE': '2019-01-15'}):
             config = LIMSConfig()
-            assert config.end_date == datetime(2021, 1, 15)
+            assert config.end_date == datetime(2019, 1, 15)
 
     def test_custom_start_date_from_env(self):
-        with patch.dict('os.environ', {'LIMS_START_DATE': '2023-03-15'}):
+        with patch.dict('os.environ', {'LIMS_START_DATE': '2019-03-15'}):
             config = LIMSConfig()
-            assert config.start_date == datetime(2023, 3, 15)
+            assert config.start_date == datetime(2019, 3, 15)
 
 
 class TestLocalFixtures:

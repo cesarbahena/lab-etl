@@ -1,9 +1,13 @@
+using System;
+using System.Collections.Generic;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace QuimiOSWebForms.Pages;
+namespace QuimiOSWebForms.Pages
+{
 
 public class ReagentGridRecord
 {
@@ -33,9 +37,9 @@ public class ConsumoReacLabMasivoModel : PageModel
     public string FechaDesde { get; set; } = DateTime.Now.AddDays(-7).ToString("dd/MM/yyyy");
     public string FechaHasta { get; set; } = DateTime.Now.ToString("dd/MM/yyyy");
     public string LoggedInUser { get; set; } = "";
-    public string? ErrorMessage { get; set; }
-    public string? SuccessMessage { get; set; }
-    public List<ReagentGridRecord> Records { get; set; } = new();
+    public string ErrorMessage { get; set; }
+    public string SuccessMessage { get; set; }
+    public List<ReagentGridRecord> Records { get; set; } = new List<ReagentGridRecord>();
 
     // All 61 reagent codes from quimios-names.js
     private static readonly string[] ReagentCodes = {
@@ -108,7 +112,7 @@ public class ConsumoReacLabMasivoModel : PageModel
         ViewState = Convert.ToBase64String(Encoding.UTF8.GetBytes(stateData));
 
         var vsgData = $"Generator={timestamp.GetHashCode() % 10000}";
-        ViewStateGenerator = Convert.ToBase64String(Encoding.UTF8.GetBytes(vsgData))[..20];
+        ViewStateGenerator = Convert.ToBase64String(Encoding.UTF8.GetBytes(vsgData)).Substring(0, 20);
 
         var allowedEvents = $"/Inventarios/ConsumoReacLabMasivo:btnBuscarEstudio|/Inventarios/ConsumoReacLabMasivo:btnGuardaMasivo|{timestamp}";
         EventValidation = Convert.ToBase64String(Encoding.UTF8.GetBytes(allowedEvents));
@@ -140,7 +144,9 @@ public class ConsumoReacLabMasivoModel : PageModel
         for (int i = 0; i < ReagentCodes.Length; i++)
         {
             var code = ReagentCodes[i];
-            var baseStock = stockBase.GetValueOrDefault(code, 50);
+            decimal baseStock;
+            if (!stockBase.TryGetValue(code, out baseStock))
+                baseStock = 50;
             Records.Add(new ReagentGridRecord
             {
                 ReagentCode = code,
@@ -211,4 +217,5 @@ public class ConsumoReacLabMasivoModel : PageModel
 
         return errors;
     }
+}
 }

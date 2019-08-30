@@ -34,6 +34,10 @@ See `benchmark_scraper.py` for performance comparison.
 
 ## Local synthetic smoke test
 
+Use Python 3.7 and .NET Core 2.2 for the local tools. The scheduler uses
+Airflow 1.10.4. Install dependencies with `python -m pip install -r
+requirements.txt` from this directory.
+
 Start PostgreSQL and the Hub as described in the sibling `../hub/README.md`. Run the WebForms mock in another terminal:
 
 ```bash
@@ -43,7 +47,7 @@ dotnet run --project webforms_mock/QuimiOSWebForms.csproj --urls http://localhos
 Install the Python package and pytest, then run the suite. The WebForms E2E tests use port 5150 and detect the already running mock on Windows.
 
 ```bash
-python -m pip install -e . pytest
+python -m pip install -r requirements.txt
 python -m pytest tests/ -q
 ```
 
@@ -56,12 +60,12 @@ from lims_etl.api_client import LIMSApiClient
 scraper = HTTPScraper("http://localhost:5150")
 assert scraper.login()
 client = LIMSApiClient("http://localhost:5181")
-exams = client.exams_for_partition(scraper.get_samples_page(1), "2023-03-20")
-result = client.sync_exams_idempotent(exams, "2023-03-20")
+exams = client.exams_for_partition(scraper.get_samples_page(1), "2019-03-20")
+result = client.sync_exams_idempotent(exams, "2019-03-20")
 print(result)
 ```
 
-The mock's first page contains one exam received on 20 March 2023. Repeating the snippet atomically replaces that date's Hub records; `deleted` should then be nonzero. This flow changes only the local demo database configured for Hub. See `../hub/README.md` for the GET request that inspects the partition.
+The mock's first page contains one exam received on 20 March 2019. Repeating the snippet atomically replaces that date's Hub records; `deleted` should then be nonzero. This flow changes only the local demo database configured for Hub. See `../hub/README.md` for the GET request that inspects the partition.
 
 ## Standalone scraper
 
@@ -76,7 +80,7 @@ python benchmark_scraper.py --url http://localhost:5150 --pages 10
 ## Development
 
 ```bash
-# Start mock WebForms server (requires .NET 10)
+# Start mock WebForms server (requires .NET Core 2.2)
 dotnet run --project webforms_mock/QuimiOSWebForms.csproj --urls http://localhost:5150
 
 # Run unit tests only
@@ -115,7 +119,7 @@ HUB_API_URL=http://localhost:5181
 HUB_API_KEY=
 ```
 
-The DAGs select exams by `ReceivedAt` and send the batch to `POST /api/exams/partition?partitionDate=yyyy-MM-dd`. Hub validates the entire batch and replaces that partition in one database transaction. An explicit empty batch clears a partition; the DAGs reject an empty selection because their 10-page scrape limit cannot prove the LIMS date is truly empty. The daily DAG verifies the written partition through paged `GET /api/exams` results. Airflow execution and real LIMS behavior have not been verified by the local smoke path; the source timezone and complete historical pagination still need verification.
+The DAGs select exams by `ReceivedAt` and send the batch to `POST /api/exams/partition?partitionDate=yyyy-MM-dd`. Hub validates the entire batch and replaces that partition in one database transaction. An explicit empty batch clears a partition; the DAGs reject an empty selection because an empty response cannot prove the LIMS date is truly empty. Pagination is checked before replacing the partition; a failed, repeated, or truncated page stops the import. The daily DAG verifies the written partition through paged `GET /api/exams` results. Trigger the backfill DAG with `start_date` and `end_date` in its run configuration. Each date is verified before the next. Real LIMS pagination and source timezone still need verification.
 
 ## License
 

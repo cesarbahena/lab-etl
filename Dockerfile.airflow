@@ -1,31 +1,19 @@
-FROM apache/airflow:2.8.2-python3.12
+FROM python:3.7.4-slim-buster
 
-# Install system dependencies
-USER root
-RUN apt-get update && apt-get install -y \
-    gcc \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+RUN sed -i 's/deb.debian.org/archive.debian.org/g; s/security.debian.org/archive.debian.org/g; /buster-updates/d' /etc/apt/sources.list \
+    && apt-get -o Acquire::Check-Valid-Until=false update \
+    && apt-get install -y --no-install-recommends \
+    gcc libpq-dev && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir 'pip==19.2.3' 'setuptools==41.2.0' \
+    'wheel==0.33.6' 'Flask==1.1.1' 'itsdangerous==1.1.0' \
+    'Werkzeug==0.15.5' 'Jinja2==2.10.1' 'MarkupSafe==1.1.1' \
+    'WTForms==2.2.1' 'Alembic==1.1.0' \
+    'marshmallow==2.19.5' 'marshmallow-sqlalchemy==0.17.0' \
+    'apache-airflow[postgres]==1.10.4'
 
-# Install Python dependencies for ETL
-COPY pyproject.toml*.txt* ./
-RUN pip install --no-cache-dir "apache-airflow==2.8.2" \
-    psycopg2-binary \
-    selenium \
-    webdriver-manager \
-    pandas \
-    python-dotenv \
-    requests \
-    beautifulsoup4
-
-# Install pytest
-RUN pip install --no-cache-dir pytest pytest-cov pytest-mock
-
-# Switch back to airflow user
-USER airflow
-
-# Default arguments for Airflow
-CMD ["bash"]
-
-# Add local src to PYTHONPATH so imports work
-ENV PYTHONPATH=/opt/airflow/src:$PYTHONPATH
+ENV AIRFLOW_HOME=/opt/airflow
+WORKDIR /opt/airflow
+COPY setup.py requirements.txt ./
+COPY src ./src
+RUN pip install --no-cache-dir -e .
+ENV PYTHONPATH=/opt/airflow/src

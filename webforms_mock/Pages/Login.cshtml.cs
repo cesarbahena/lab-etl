@@ -1,25 +1,28 @@
+using System;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace QuimiOSWebForms.Pages;
+namespace QuimiOSWebForms.Pages
+{
 
 public class LoginModel : PageModel
 {
     [BindProperty]
-    public string? Login1_UserName { get; set; }
+    public string Login1_UserName { get; set; }
     
     [BindProperty]
-    public string? Login1_Password { get; set; }
+    public string Login1_Password { get; set; }
     
     [BindProperty]
-    public string? Login1_LoginButton { get; set; }
+    public string Login1_LoginButton { get; set; }
     
     public string ViewState { get; set; } = "";
     public string ViewStateGenerator { get; set; } = "";
     public string EventValidation { get; set; } = "";
-    public string? ErrorMessage { get; set; }
+    public string ErrorMessage { get; set; }
     
     private const string VALID_USER = "demo_user";
     private const string VALID_PASS = "demo_pass";
@@ -54,7 +57,7 @@ public class LoginModel : PageModel
         ViewState = Convert.ToBase64String(Encoding.UTF8.GetBytes(stateData));
         
         var vsgData = $"Generator={timestamp.GetHashCode() % 10000}";
-        ViewStateGenerator = Convert.ToBase64String(Encoding.UTF8.GetBytes(vsgData))[..20];
+        ViewStateGenerator = Convert.ToBase64String(Encoding.UTF8.GetBytes(vsgData)).Substring(0, 20);
         
         // EventValidation for allowed events on this page
         var allowedEvents = $"/Login:btnLogin|{timestamp}";
@@ -66,4 +69,5 @@ public class LoginModel : PageModel
         var tokenData = $"{HttpContext.Session.Id}|{DateTime.UtcNow.Ticks}";
         return Convert.ToBase64String(Encoding.UTF8.GetBytes(tokenData));
     }
+}
 }

@@ -1,9 +1,13 @@
+using System;
+using System.Collections.Generic;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace QuimiOSWebForms.Pages;
+namespace QuimiOSWebForms.Pages
+{
 
 public class WorkOrderRecord
 {
@@ -33,7 +37,7 @@ public class ConsultaModel : PageModel
     
     public int CurrentPage { get; set; } = 1;
     public int TotalPages { get; set; } = 10;
-    public List<WorkOrderRecord> Records { get; set; } = new();
+    public List<WorkOrderRecord> Records { get; set; } = new List<WorkOrderRecord>();
     public string LoggedInUser { get; set; } = "";
     public int ClientId { get; set; } = 101;
     
@@ -92,7 +96,7 @@ public class ConsultaModel : PageModel
         ViewState = Convert.ToBase64String(Encoding.UTF8.GetBytes(stateData));
         
         var vsgData = $"Generator={timestamp.GetHashCode() % 10000}";
-        ViewStateGenerator = Convert.ToBase64String(Encoding.UTF8.GetBytes(vsgData))[..20];
+        ViewStateGenerator = Convert.ToBase64String(Encoding.UTF8.GetBytes(vsgData)).Substring(0, 20);
         
         // EventValidation for pagination and search
         var allowedEvents = $"/Consulta:btnBuscar|/Consulta:lnkNext|/Consulta:lnkPrev|Page={CurrentPage}";
@@ -103,7 +107,7 @@ public class ConsultaModel : PageModel
     {
         var random = new Random(CurrentPage * 1000 + ClientId);
         var startIndex = (CurrentPage - 1) * PageSize;
-        var baseDate = new DateTime(2023, 03, 20);
+        var baseDate = new DateTime(2019, 03, 20);
         
         for (int i = 0; i < PageSize; i++)
         {
@@ -132,4 +136,5 @@ public class ConsultaModel : PageModel
             });
         }
     }
+}
 }

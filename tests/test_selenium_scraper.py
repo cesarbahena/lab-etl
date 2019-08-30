@@ -194,11 +194,11 @@ class TestDateParsing:
 
     def test_valid_date_format(self, config, mock_driver):
         scraper = make_scraper(config, mock_driver)
-        mock_driver.find_element.return_value.text = "20/03/2023 01:18:00 PM"
+        mock_driver.find_element.return_value.text = "20/03/2019 01:18:00 PM"
 
         result = scraper.parse_date(2, '_lblFechaRecep')
 
-        assert result.year == 2023
+        assert result.year == 2019
         assert result.month == 3
         assert result.day == 20
 

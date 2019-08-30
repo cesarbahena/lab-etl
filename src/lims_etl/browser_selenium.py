@@ -1,6 +1,5 @@
 import logging
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from lims_etl.config import LIMSConfig
 
@@ -25,8 +24,9 @@ class Browser:
     def start_driver(self):
         """Initializes the Chrome WebDriver."""
         try:
-            service = Service(ChromeDriverManager().install())
-            self.driver = webdriver.Chrome(service=service, options=self.config.chrome_options)
+            self.driver = webdriver.Chrome(
+                executable_path=ChromeDriverManager().install(),
+                chrome_options=self.config.chrome_options)
             reg.info("Chrome driver initialized successfully")
         except Exception as e:
             reg.error(f"Failed to start Chrome driver: {e}")

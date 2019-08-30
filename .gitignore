@@ -6,6 +6,7 @@ Muestras.csv
 
 # Log files
 *.log
+logs/
 
 # Chrome driver
 chromedriver

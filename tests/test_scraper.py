@@ -41,30 +41,30 @@ def sample_consulta_html():
         <table id="ctl00_ContentMasterPage_grdConsultaOT">
             <tbody>
                 <tr>
-                    <td><span id="grd_ctl02_lblFechaGrd">20/03/2023 12:00:00 AM</span></td>
-                    <td><span id="grd_ctl02_lblFechaRecep">20/03/2023 01:18:00 AM</span></td>
+                    <td><span id="grd_ctl02_lblFechaGrd">20/03/2019 12:00:00 AM</span></td>
+                    <td><span id="grd_ctl02_lblFechaRecep">20/03/2019 01:18:00 AM</span></td>
                     <td><span id="grd_ctl02_lblFolioGrd">100002</span></td>
                     <td><span id="grd_ctl02_lblClienteGrd">105</span></td>
                     <td><span id="grd_ctl02_lblPacienteGrd">387</span></td>
                     <td><span id="grd_ctl02_lblEstPerGrd">168</span></td>
                     <td><span id="grd_ctl02_Label1">Glucose</span></td>
-                    <td><span id="grd_ctl02_lblFecCapRes">20/03/2023 09:18:00 AM</span></td>
-                    <td><span id="grd_ctl02_lblFecLibera">20/03/2023 02:18:00 PM</span></td>
+                    <td><span id="grd_ctl02_lblFecCapRes">20/03/2019 09:18:00 AM</span></td>
+                    <td><span id="grd_ctl02_lblFecLibera">20/03/2019 02:18:00 PM</span></td>
                     <td><span id="grd_ctl02_lblSucProc">Branch C</span></td>
                     <td><span id="grd_ctl02_lblMaquilador">LabCorp</span></td>
                     <td><span id="grd_ctl02_Label3">Stat</span></td>
                     <td><span id="grd_ctl02_lblFecNac">21/11/1979</span></td>
                 </tr>
                 <tr>
-                    <td><span id="grd_ctl03_lblFechaGrd">19/03/2023 09:00:00 PM</span></td>
-                    <td><span id="grd_ctl03_lblFechaRecep">19/03/2023 09:32:00 PM</span></td>
+                    <td><span id="grd_ctl03_lblFechaGrd">19/03/2019 09:00:00 PM</span></td>
+                    <td><span id="grd_ctl03_lblFechaRecep">19/03/2019 09:32:00 PM</span></td>
                     <td><span id="grd_ctl03_lblFolioGrd">100003</span></td>
                     <td><span id="grd_ctl03_lblClienteGrd">104</span></td>
                     <td><span id="grd_ctl03_lblPacienteGrd">831</span></td>
                     <td><span id="grd_ctl03_lblEstPerGrd">435</span></td>
                     <td><span id="grd_ctl03_Label1">CBC</span></td>
-                    <td><span id="grd_ctl03_lblFecCapRes">20/03/2023 01:32:00 AM</span></td>
-                    <td><span id="grd_ctl03_lblFecLibera">21/03/2023 01:32:00 AM</span></td>
+                    <td><span id="grd_ctl03_lblFecCapRes">20/03/2019 01:32:00 AM</span></td>
+                    <td><span id="grd_ctl03_lblFecLibera">21/03/2019 01:32:00 AM</span></td>
                     <td><span id="grd_ctl03_lblSucProc">Lab East</span></td>
                     <td><span id="grd_ctl03_lblMaquilador">Quest Labs</span></td>
                     <td><span id="grd_ctl03_Label3">Routine</span></td>
@@ -206,7 +206,7 @@ class TestHTTPScraperParsing:
     def test_parse_row_extracts_all_fields(self):
         """Should extract all fields from a grid row."""
         html = '''<tr>
-            <td><span id="test_lblFechaGrd">20/03/2023</span></td>
+            <td><span id="test_lblFechaGrd">20/03/2019</span></td>
             <td><span id="test_lblFolioGrd">100002</span></td>
             <td><span id="test_lblClienteGrd">105</span></td>
             <td><span id="test_Label1">Glucose</span></td>
@@ -220,7 +220,7 @@ class TestHTTPScraperParsing:
         result = scraper._parse_row(row)
         
         assert result is not None
-        assert result['CreatedAt'] == '20/03/2023'
+        assert result['CreatedAt'] == '20/03/2019'
         assert result['Folio'] == '100002'
         assert result['ClientId'] == '105'
         assert result['ExamName'] == 'Glucose'

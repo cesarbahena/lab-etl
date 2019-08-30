@@ -294,19 +294,37 @@ class HTTPScraper:
         if client_id:
             self.search_client(client_id)
         
-        # Scrape first page
+        # Do not send a partial snapshot to a partition replacement endpoint.
         page = 1
+        seen_pages = set()
         while True:
-            records = self.get_samples_page(page)
+            response = self.get_consulta(page)
+            if response is None:
+                raise RuntimeError('Consulta page {} could not be loaded'.format(page))
+            records = self.parse_current_page(response.text)
             if not records:
                 break
-            
+
+            signature = tuple((str(record.get('Folio')), str(record.get('ReceivedAt')))
+                              for record in records)
+            if signature in seen_pages:
+                raise RuntimeError('Consulta repeated page {}; refusing a partial sync'.format(page))
+            seen_pages.add(signature)
             all_records.extend(records)
+
+            # The mock exposes a page count. Real LIMS pages without one continue
+            # until an empty page, with the repeated-page guard above.
+            import re
+            count = re.search(r'P[aá]gina\s+(\d+)\s+de\s+(\d+)', response.text, re.I)
+            if count:
+                current, total = map(int, count.groups())
+                if current != page:
+                    raise RuntimeError('Consulta returned page {} for request {}'.format(current, page))
+                if page >= total:
+                    break
             page += 1
-            
-            # Safety limit (mock has 10 pages)
             if page > 100:
-                break
+                raise RuntimeError('Consulta exceeded 100 pages; refusing a partial sync')
         
         log.info(f"Scraped {len(all_records)} total records")
         return all_records

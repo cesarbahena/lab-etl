@@ -17,12 +17,13 @@ from lims_etl.scraper import HTTPScraper
 # Test Configuration
 # ============================================================================
 
-MOCK_SERVER_PORT = 5150
+MOCK_SERVER_PORT = int(os.getenv('MOCK_SERVER_PORT', '5150'))
 MOCK_SERVER_URL = f"http://localhost:{MOCK_SERVER_PORT}"
 MOCK_PROJECT_DIR = os.path.join(
     os.path.dirname(os.path.dirname(__file__)), 
     'webforms_mock'
 )
+DOTNET = os.getenv('DOTNET_HOST_PATH', 'dotnet')
 
 
 @pytest.fixture(scope="module")
@@ -43,7 +44,7 @@ def mock_server():
     
     # Build the project first
     build_result = subprocess.run(
-        ["dotnet", "build"],
+        [DOTNET, "build"],
         cwd=MOCK_PROJECT_DIR,
         capture_output=True,
         text=True
@@ -53,7 +54,7 @@ def mock_server():
     
     # Run the built DLL directly so the process we terminate owns the server.
     process = subprocess.Popen(
-        ["dotnet", os.path.join(MOCK_PROJECT_DIR, "bin", "Debug", "net10.0", "QuimiOSWebForms.dll"),
+        [DOTNET, os.path.join(MOCK_PROJECT_DIR, "bin", "Debug", "netcoreapp2.2", "QuimiOSWebForms.dll"),
          "--urls", MOCK_SERVER_URL],
         cwd=MOCK_PROJECT_DIR,
         stdout=subprocess.PIPE,

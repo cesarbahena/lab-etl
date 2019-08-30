@@ -3,13 +3,7 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python=3.10
-  - selenium
-  - pandas
-  - python-dotenv
-  - psycopg2
-  - sqlalchemy
-  - requests
+  - python=3.7
   - pip
   - pip:
-    - webdriver-manager
+    - -r requirements.txt

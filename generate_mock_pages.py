@@ -106,7 +106,7 @@ def generate_pagination(current_page, total_pages=25):
 def generate_page_html(page_num, cliente=101):
     """Generate complete HTML page"""
     # Base date: start from recent and go back in time
-    base_date = datetime(2023, 3, 20) - timedelta(days=(page_num - 1) * 2)
+    base_date = datetime(2019, 3, 20) - timedelta(days=(page_num - 1) * 2)
     folio_base = 100000 + ((page_num - 1) * 10)
 
     # Generate 10 rows per page
@@ -186,7 +186,7 @@ def main():
     print(f"  Updated: consulta.html (page 1)")
 
     print(f"\nGenerated 25 pages with 250 total samples (10 per page)")
-    print(f"Date range: 2023-03-20 going back ~50 days")
+    print(f"Date range: 2019-03-20 going back ~50 days")
     print(f"Folio range: 100002-100251")
 
 if __name__ == "__main__":
