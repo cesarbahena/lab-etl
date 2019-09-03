@@ -122,7 +122,7 @@
                                 <input type="hidden" id="ctl00_ContentMasterPage_grdConsumo_ctl@(rowIndex)_hfCalcAuto" name="ctl00$ContentMasterPage$grdConsumo$ctl@(rowIndex)$hfCalcAuto" value="@record.CalcAuto">
                             </td>
                             <td class="wd060">
-                                <span id="ctl00_ContentMasterPage_grdConsumo_ctl@(rowIndex)_lblExistFinal">@record.Stock</span>
+                                <span id="ctl00_ContentMasterPage_grdConsumo_ctl@(rowIndex)_lblExistFinal">@record.Stock.ToString(System.Globalization.CultureInfo.InvariantCulture)</span>
                             </td>
                             <td class="wd080">
                                 <input type="text" id="ctl00_ContentMasterPage_grdConsumo_ctl@(rowIndex)_txtPacientes" name="ctl00$ContentMasterPage$grdConsumo$ctl@(rowIndex)$txtPacientes" value="@record.Pacientes" class="wd080">

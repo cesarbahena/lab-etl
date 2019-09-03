@@ -1,9 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using System.Security.Cryptography;
 using System.Text;
 
 namespace QuimiOSWebForms.Pages
@@ -14,7 +15,7 @@ public class ReagentGridRecord
     public string ReagentCode { get; set; } = "";
     public int ProductId { get; set; }
     public decimal Stock { get; set; }
-    public int Pacientes { get; set; }
+    public decimal Pacientes { get; set; }
     public int Repeticiones { get; set; }
     public int Control { get; set; }
     public int Calibracion { get; set; }
@@ -29,6 +30,14 @@ public class ReagentGridRecord
 
 public class ConsumoReacLabMasivoModel : PageModel
 {
+    private readonly MockInventoryStore _inventory;
+    private long _renderedVersion;
+
+    public ConsumoReacLabMasivoModel(MockInventoryStore inventory)
+    {
+        _inventory = inventory;
+    }
+
     public string ViewState { get; set; } = "";
     public string ViewStateGenerator { get; set; } = "";
     public string EventValidation { get; set; } = "";
@@ -41,27 +50,13 @@ public class ConsumoReacLabMasivoModel : PageModel
     public string SuccessMessage { get; set; }
     public List<ReagentGridRecord> Records { get; set; } = new List<ReagentGridRecord>();
 
-    // All 61 reagent codes from quimios-names.js
-    private static readonly string[] ReagentCodes = {
-        "ACVALPMT", "AFP_MTY", "BHCGMTY", "CA125MTY", "CA153MTY", "CA199MTY", "CEA2MTY",
-        "CORSMTY", "E2MTY", "FERR_MTY", "FSHMTY", "INSULMTY", "LHMTY", "PROGMTY", "PROLMTY",
-        "PSALIBMT", "PSATOTMT", "TETOTMTY", "TSHMTY", "TUMTY", "T3LIBMTY", "T3TOTMTY",
-        "T4LIBMTY", "T4TOTMTY", "ACURIMTY", "ALBMTY", "AMIMTY", "BILIDMTY", "BILITMTY",
-        "CA-SMTY", "CLOMTY", "COLHMTY", "COLTMTY", "CREAMTY", "C3_MTY", "C4_MTY",
-        "DHLMTY", "FESMTY", "FOSFAMTY", "FOSFMTY", "GGTPMTY", "GLUMTY", "IgA_MTY",
-        "IgG_MTY", "IgM_MTY", "IgE_MTY", "LIPASAMT", "MGSMTY", "NITROMTY", "PCRCUMTY",
-        "PCRULMTY", "POTMTY", "PRTTSMTY", "SODMTY", "TGOMTY", "TGPMTY", "TRF_MTY",
-        "TRIGLMTY", "UIBCMTY", "HBGLMTY", "DIMEMTY"
-    };
-
     public IActionResult OnGet()
     {
         if (!IsAuthenticated())
             return RedirectToPage("/Login");
 
         LoggedInUser = HttpContext.Session.GetString("User") ?? "demo_user";
-        GenerateViewState();
-        GenerateRecords();
+        RenderGrid();
         return Page();
     }
 
@@ -71,32 +66,52 @@ public class ConsumoReacLabMasivoModel : PageModel
             return RedirectToPage("/Login");
 
         LoggedInUser = HttpContext.Session.GetString("User") ?? "demo_user";
-        GenerateViewState();
+        if (!HasCurrentFormState())
+        {
+            ErrorMessage = "La consulta venció. Actualice el inventario antes de guardar.";
+            RenderGrid();
+            return Page();
+        }
 
         // Handle search button
         if (Request.Form.ContainsKey("ctl00$ContentMasterPage$btnBuscarEstudio"))
         {
-            GenerateRecords();
+            RenderGrid();
             return Page();
         }
 
         // Handle save button
         if (Request.Form.ContainsKey("ctl00$ContentMasterPage$btnGuardaMasivo"))
         {
-            var validationErrors = ValidateAndSave();
+            Dictionary<string, decimal> consumption;
+            var validationErrors = ValidateConsumption(out consumption);
+            if (validationErrors.Count == 0)
+            {
+                long expectedVersion;
+                if (!long.TryParse(HttpContext.Session.GetString("InventoryVersion"),
+                                   NumberStyles.None, CultureInfo.InvariantCulture,
+                                   out expectedVersion))
+                    validationErrors.Add("La consulta venció. Actualice el inventario.");
+                else
+                {
+                    var storeError = _inventory.Apply(expectedVersion, consumption);
+                    if (storeError != null)
+                        validationErrors.Add(storeError);
+                }
+            }
             if (validationErrors.Count > 0)
             {
                 ErrorMessage = string.Join("; ", validationErrors);
-                GenerateRecords(); // Re-generate to show current state
+                RenderGrid();
                 return Page();
             }
 
             SuccessMessage = "Consumos guardados correctamente";
-            GenerateRecords();
+            RenderGrid();
             return Page();
         }
 
-        GenerateRecords();
+        RenderGrid();
         return Page();
     }
 
@@ -105,11 +120,26 @@ public class ConsumoReacLabMasivoModel : PageModel
         return HttpContext.Session.GetString("Authenticated") == "true";
     }
 
+    private bool HasCurrentFormState()
+    {
+        var expected = HttpContext.Session.GetString("InventoryViewState");
+        return expected != null && string.Equals(
+            Request.Form["__VIEWSTATE"].ToString(), expected, StringComparison.Ordinal);
+    }
+
+    private void RenderGrid()
+    {
+        GenerateRecords();
+        GenerateViewState();
+    }
+
     private void GenerateViewState()
     {
         var timestamp = DateTime.UtcNow.Ticks.ToString();
-        var stateData = $"Page=ConsumoReacLabMasivo|Timestamp={timestamp}|Session={HttpContext.Session.Id}";
+        var stateData = $"Page=ConsumoReacLabMasivo|Timestamp={timestamp}|Session={HttpContext.Session.Id}|Version={_renderedVersion}";
         ViewState = Convert.ToBase64String(Encoding.UTF8.GetBytes(stateData));
+        HttpContext.Session.SetString("InventoryViewState", ViewState);
+        HttpContext.Session.SetString("InventoryVersion", _renderedVersion.ToString(CultureInfo.InvariantCulture));
 
         var vsgData = $"Generator={timestamp.GetHashCode() % 10000}";
         ViewStateGenerator = Convert.ToBase64String(Encoding.UTF8.GetBytes(vsgData)).Substring(0, 20);
@@ -120,38 +150,17 @@ public class ConsumoReacLabMasivoModel : PageModel
 
     private void GenerateRecords()
     {
-        var random = new Random(42); // Fixed seed for reproducibility
-        var stockBase = new Dictionary<string, decimal>
+        var snapshot = _inventory.Read();
+        _renderedVersion = snapshot.Version;
+        Records.Clear();
+        for (int i = 0; i < MockInventoryStore.ReagentCodes.Length; i++)
         {
-            ["GLUMTY"] = 100, ["TSHMTY"] = 50, ["CREAMTY"] = 75, ["COLHMTY"] = 60,
-            ["COLTMTY"] = 80, ["AMIMTY"] = 45, ["FERR_MTY"] = 30, ["TETOTMTY"] = 55,
-            ["PSATOTMT"] = 40, ["BHCGMTY"] = 35, ["CA125MTY"] = 25, ["HBGLMTY"] = 70,
-            ["DIMEMTY"] = 20, ["TUMTY"] = 50, ["TGOMTY"] = 65, ["TGPMTY"] = 55,
-            ["DHLMTY"] = 40, ["C3_MTY"] = 35, ["C4_MTY"] = 35, ["IgG_MTY"] = 45,
-            ["IgM_MTY"] = 45, ["IgE_MTY"] = 40, ["PCRCUMTY"] = 60, ["TRIGLMTY"] = 80,
-            ["FOSFAMTY"] = 25, ["GGTPMTY"] = 55, ["MGSMTY"] = 30, ["NITROMTY"] = 50,
-            ["FESMTY"] = 40, ["UIBCMTY"] = 35, ["TRF_MTY"] = 45, ["LIPASAMT"] = 30,
-            ["ACURIMTY"] = 25, ["ALBMTY"] = 70, ["BILIDMTY"] = 45, ["BILITMTY"] = 50,
-            ["CA-SMTY"] = 40, ["CLOMTY"] = 60, ["FOSFMTY"] = 50, ["PRTTSMTY"] = 55,
-            ["SODMTY"] = 60, ["POTMTY"] = 60, ["ACVALPMT"] = 25, ["AFP_MTY"] = 30,
-            ["CA153MTY"] = 20, ["CA199MTY"] = 20, ["CEA2MTY"] = 30, ["CORSMTY"] = 35,
-            ["E2MTY"] = 25, ["FSHMTY"] = 30, ["INSULMTY"] = 40, ["LHMTY"] = 30,
-            ["PROGMTY"] = 20, ["PROLMTY"] = 20, ["PSALIBMT"] = 20, ["T3LIBMTY"] = 35,
-            ["T3TOTMTY"] = 35, ["T4LIBMTY"] = 35, ["T4TOTMTY"] = 35, ["IgA_MTY"] = 40,
-            ["PCRULMTY"] = 60
-        };
-
-        for (int i = 0; i < ReagentCodes.Length; i++)
-        {
-            var code = ReagentCodes[i];
-            decimal baseStock;
-            if (!stockBase.TryGetValue(code, out baseStock))
-                baseStock = 50;
+            var code = MockInventoryStore.ReagentCodes[i];
             Records.Add(new ReagentGridRecord
             {
                 ReagentCode = code,
                 ProductId = 1000 + i,
-                Stock = baseStock + random.Next(-5, 5),
+                Stock = snapshot.Stock[code],
                 Pacientes = 0,
                 Repeticiones = 0,
                 Control = 0,
@@ -167,55 +176,70 @@ public class ConsumoReacLabMasivoModel : PageModel
         }
     }
 
-    private List<string> ValidateAndSave()
+    private List<string> ValidateConsumption(out Dictionary<string, decimal> consumption)
     {
         var errors = new List<string>();
+        consumption = new Dictionary<string, decimal>(StringComparer.Ordinal);
         var prefix = "ctl00$ContentMasterPage$grdConsumo$ctl";
 
-        for (int i = 0; i < ReagentCodes.Length; i++)
+        foreach (var key in Request.Form.Keys)
+        {
+            if (!key.StartsWith(prefix, StringComparison.Ordinal))
+                continue;
+            var suffix = key.Substring(prefix.Length);
+            int row;
+            if (suffix.Length < 3 || !int.TryParse(suffix.Substring(0, 2), out row) ||
+                suffix[2] != '$' || row < 2 || row >= MockInventoryStore.ReagentCodes.Length + 2)
+                errors.Add("Fila de reactivo desconocida: " + key);
+        }
+
+        for (int i = 0; i < MockInventoryStore.ReagentCodes.Length; i++)
         {
             var rowIndex = (i + 2).ToString("D2");
-            var code = ReagentCodes[i];
+            var code = MockInventoryStore.ReagentCodes[i];
+            var rowPrefix = prefix + rowIndex + "$";
+            if (!Request.Form.Keys.Any(key => key.StartsWith(rowPrefix, StringComparison.Ordinal)))
+                continue;
 
-            // Check if any values were submitted for this row
-            var pacientesKey = $"{prefix}{rowIndex}$txtPacientes";
-            var repeticionesKey = $"{prefix}{rowIndex}$txtRepeticiones";
-            var controlKey = $"{prefix}{rowIndex}$txtControlCapMGrd";
-            var calibracionKey = $"{prefix}{rowIndex}$txtCalibracionCapMGrd";
-            var cancelacionKey = $"{prefix}{rowIndex}$txtCancelacionCapMGrd";
+            var productKey = rowPrefix + "hfIDProducto";
+            int productId;
+            if (Request.Form[productKey].Count != 1 ||
+                !int.TryParse(Request.Form[productKey], out productId) || productId != 1000 + i)
+                errors.Add("Producto inválido para " + code);
 
-            if (Request.Form.ContainsKey(pacientesKey))
+            var px = ReadAmount(rowPrefix + "txtPacientes", code, true, errors);
+            var rep = ReadAmount(rowPrefix + "txtRepeticiones", code, false, errors);
+            var qc = ReadAmount(rowPrefix + "txtControlCapMGrd", code, false, errors);
+            var cal = ReadAmount(rowPrefix + "txtCalibracionCapMGrd", code, false, errors);
+            var canc = ReadAmount(rowPrefix + "txtCancelacionCapMGrd", code, false, errors);
+            try
             {
-                if (!int.TryParse(Request.Form[pacientesKey], out var pacientes) || pacientes < 0)
-                    errors.Add($"Pacientes invalido para {code}: {Request.Form[pacientesKey]}");
+                var total = checked(px + rep + qc + cal + canc);
+                if (total != 0)
+                    consumption.Add(code, total);
             }
-
-            if (Request.Form.ContainsKey(repeticionesKey))
+            catch (OverflowException)
             {
-                if (!int.TryParse(Request.Form[repeticionesKey], out var repeticiones) || repeticiones < 0)
-                    errors.Add($"Repeticiones invalido para {code}: {Request.Form[repeticionesKey]}");
-            }
-
-            if (Request.Form.ContainsKey(controlKey))
-            {
-                if (!int.TryParse(Request.Form[controlKey], out var control) || control < 0)
-                    errors.Add($"Control invalido para {code}: {Request.Form[controlKey]}");
-            }
-
-            if (Request.Form.ContainsKey(calibracionKey))
-            {
-                if (!int.TryParse(Request.Form[calibracionKey], out var calibracion) || calibracion < 0)
-                    errors.Add($"Calibracion invalido para {code}: {Request.Form[calibracionKey]}");
-            }
-
-            if (Request.Form.ContainsKey(cancelacionKey))
-            {
-                if (!int.TryParse(Request.Form[cancelacionKey], out var cancelacion) || cancelacion < 0)
-                    errors.Add($"Cancelacion invalido para {code}: {Request.Form[cancelacionKey]}");
+                errors.Add("Cantidad fuera de rango para " + code);
             }
         }
 
         return errors;
+    }
+
+    private decimal ReadAmount(string key, string code, bool allowNegative, List<string> errors)
+    {
+        decimal amount;
+        if (Request.Form[key].Count != 1 ||
+            !decimal.TryParse(Request.Form[key],
+                NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint,
+                CultureInfo.InvariantCulture, out amount) ||
+            (!allowNegative && amount < 0))
+        {
+            errors.Add("Cantidad inválida para " + code + ": " + key);
+            return 0;
+        }
+        return amount;
     }
 }
 }

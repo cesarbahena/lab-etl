@@ -11,6 +11,7 @@ namespace QuimiOSWebForms
     {
         public void ConfigureServices(IServiceCollection services)
         {
+            services.AddSingleton<MockInventoryStore>();
             services.Configure<FormOptions>(options =>
             {
                 options.MultipartBodyLengthLimit = 10 * 1024 * 1024;

@@ -67,6 +67,16 @@ print(result)
 
 The mock's first page contains one exam received on 20 March 2019. Repeating the snippet atomically replaces that date's Hub records; `deleted` should then be nonzero. This flow changes only the local demo database configured for Hub. See `../hub/README.md` for the GET request that inspects the partition.
 
+The mock inventory page at `/Inventarios/ConsumoReacLabMasivo.aspx` starts with
+synthetic reagent stock and keeps saved consumption in memory for all sessions
+until the mock server restarts. A positive `txtPacientes` amount decreases stock;
+a signed negative amount increases it. The latter lets local clients exercise
+stock corrections through the legacy consumption form, but does not imply that
+the live LIMS offers an inventory editing endpoint. A save with stale form state,
+an invalid amount, or insufficient stock rejects the entire batch. After a save,
+the page shows current stock and clears the consumption inputs so a later save
+does not repeat the prior amounts.
+
 ## Standalone scraper
 
 ```bash
