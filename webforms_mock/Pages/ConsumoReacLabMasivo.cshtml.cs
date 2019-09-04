@@ -141,8 +141,7 @@ public class ConsumoReacLabMasivoModel : PageModel
         HttpContext.Session.SetString("InventoryViewState", ViewState);
         HttpContext.Session.SetString("InventoryVersion", _renderedVersion.ToString(CultureInfo.InvariantCulture));
 
-        var vsgData = $"Generator={timestamp.GetHashCode() % 10000}";
-        ViewStateGenerator = Convert.ToBase64String(Encoding.UTF8.GetBytes(vsgData)).Substring(0, 20);
+        ViewStateGenerator = timestamp.GetHashCode().ToString("X8");
 
         var allowedEvents = $"/Inventarios/ConsumoReacLabMasivo:btnBuscarEstudio|/Inventarios/ConsumoReacLabMasivo:btnGuardaMasivo|{timestamp}";
         EventValidation = Convert.ToBase64String(Encoding.UTF8.GetBytes(allowedEvents));

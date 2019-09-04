@@ -56,8 +56,7 @@ public class LoginModel : PageModel
         var stateData = $"Page=Login|Timestamp={timestamp}|Session={HttpContext.Session.Id}";
         ViewState = Convert.ToBase64String(Encoding.UTF8.GetBytes(stateData));
         
-        var vsgData = $"Generator={timestamp.GetHashCode() % 10000}";
-        ViewStateGenerator = Convert.ToBase64String(Encoding.UTF8.GetBytes(vsgData)).Substring(0, 20);
+        ViewStateGenerator = timestamp.GetHashCode().ToString("X8");
         
         // EventValidation for allowed events on this page
         var allowedEvents = $"/Login:btnLogin|{timestamp}";

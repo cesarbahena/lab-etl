@@ -95,8 +95,7 @@ public class ConsultaModel : PageModel
         var stateData = $"Page=Consulta|CurrentPage={CurrentPage}|ClientId={ClientId}|Timestamp={timestamp}";
         ViewState = Convert.ToBase64String(Encoding.UTF8.GetBytes(stateData));
         
-        var vsgData = $"Generator={timestamp.GetHashCode() % 10000}";
-        ViewStateGenerator = Convert.ToBase64String(Encoding.UTF8.GetBytes(vsgData)).Substring(0, 20);
+        ViewStateGenerator = timestamp.GetHashCode().ToString("X8");
         
         // EventValidation for pagination and search
         var allowedEvents = $"/Consulta:btnBuscar|/Consulta:lnkNext|/Consulta:lnkPrev|Page={CurrentPage}";

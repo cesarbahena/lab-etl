@@ -57,6 +57,20 @@ def field(row, name):
     return "{}{}${}".format(ROW_PREFIX, row, name)
 
 
+@pytest.mark.parametrize("page", ["/Login", "/Consulta", INVENTORY_PATH])
+def test_pages_render_complete_webforms_state(mock_server, page):
+    session = inventory_session(mock_server)
+    response = session.get(mock_server + page)
+    response.raise_for_status()
+    soup = BeautifulSoup(response.text, "html.parser")
+    generator = soup.select_one("input[name='__VIEWSTATEGENERATOR']")
+    assert generator is not None
+    assert re.fullmatch(r"[0-9A-F]{8}", generator["value"])
+    for name in ("__VIEWSTATE", "__EVENTVALIDATION"):
+        state = soup.select_one("input[name='{}']".format(name))
+        assert state is not None and state["value"]
+
+
 def test_consumption_updates_stock_for_other_sessions(mock_server):
     first = inventory_session(mock_server)
     second = inventory_session(mock_server)
